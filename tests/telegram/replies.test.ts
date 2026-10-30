@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ExecuteResult } from "../../lib/pipeline/execute";
 import type { ReconcileAction } from "../../lib/pipeline/reconcile";
+import type { StarterReplyInfo } from "../../lib/pipeline/starters";
 import {
   budgetReply,
   dashboardKeyboard,
@@ -11,6 +12,7 @@ import {
   nothingFoundReply,
   pdfTruncatedNote,
   REFUSAL_TEXT,
+  starterLine,
   summaryReply,
   unknownCommandReply,
   unsupportedFileReply,
@@ -178,6 +180,80 @@ describe("summaryReply", () => {
       clarification: "Which module is this deadline for?",
     });
     expect(text).toBe("Which module is this deadline for?");
+  });
+
+  test("a made starter is appended as the last line", () => {
+    const text = summaryReply({
+      result: { ...emptyResult, created: [createdTask("t1", "CS2030 Lab 4", "2026-11-06T15:59:00.000Z")] },
+      clarification: null,
+      starter: { status: "made", type: "checklist", count: 9 },
+    });
+    expect(text).toBe(
+      "Added 1 task:\n- CS2030 Lab 4 (due Fri 6 Nov, 11:59pm)\nI also made a checklist of 9 things to hand in. Tick them off on your dashboard.",
+    );
+    assertNoDashes(text);
+  });
+
+  test("a failed starter adds its plain sentence", () => {
+    const text = summaryReply({
+      result: { ...emptyResult, created: [createdTask("t1", "Revise: chapter 4", null)] },
+      clarification: null,
+      starter: { status: "failed", reason: "no_study_material" },
+    });
+    expect(text).toBe(
+      "Added 1 task:\n- Revise: chapter 4\nThat PDF didn't look like study material, so I skipped the flashcards.",
+    );
+    assertNoDashes(text);
+  });
+});
+
+describe("starterLine", () => {
+  test("checklist: plural and singular counts, dashboard mention", () => {
+    expect(starterLine({ status: "made", type: "checklist", count: 9 })).toBe(
+      "I also made a checklist of 9 things to hand in. Tick them off on your dashboard.",
+    );
+    expect(starterLine({ status: "made", type: "checklist", count: 1 })).toBe(
+      "I also made a checklist of 1 thing to hand in. Tick them off on your dashboard.",
+    );
+  });
+
+  test("flashcards: plural and singular counts for both parts", () => {
+    expect(starterLine({ status: "made", type: "flashcards", count: 14, secondaryCount: 4 })).toBe(
+      "I also made 14 flashcards and 4 practice questions from your slides.",
+    );
+    expect(starterLine({ status: "made", type: "flashcards", count: 1, secondaryCount: 1 })).toBe(
+      "I also made 1 flashcard and 1 practice question from your slides.",
+    );
+  });
+
+  test("each failure reason gets its own plain sentence", () => {
+    const cases: Array<[StarterReplyInfo, string]> = [
+      [
+        { status: "failed", reason: "empty_checklist" },
+        "I couldn't find a list of requirements in that PDF.",
+      ],
+      [
+        { status: "failed", reason: "no_study_material" },
+        "That PDF didn't look like study material, so I skipped the flashcards.",
+      ],
+      [
+        { status: "failed", reason: "too_thin" },
+        "There wasn't enough on those slides for a full set of flashcards.",
+      ],
+      [
+        { status: "failed", reason: "generic" },
+        "I added the task but couldn't build the extra help this time. Try sending the file again.",
+      ],
+    ];
+    for (const [starter, sentence] of cases) {
+      expect(starterLine(starter)).toBe(sentence);
+      assertNoDashes(sentence);
+    }
+  });
+
+  test("null and undefined mean say nothing", () => {
+    expect(starterLine(null)).toBeNull();
+    expect(starterLine(undefined)).toBeNull();
   });
 });
 

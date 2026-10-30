@@ -1,12 +1,15 @@
 // Pure-ish ingest orchestration: understand -> map to reconcile actions ->
-// plan -> execute -> mark the upload done. All I/O is injected, so tests run
-// the real pipeline against fakes. Errors propagate to the caller (the
-// Telegram handler marks the upload failed); nothing is swallowed here.
+// plan -> execute -> attach the first-step starter -> mark the upload done.
+// All I/O is injected, so tests run the real pipeline against fakes. Errors
+// propagate to the caller (the Telegram handler marks the upload failed);
+// document-starter failures are the one exception: they are isolated below so
+// a captured task is never lost to a broken starter.
 import type { FinishUploadPatch } from "@/lib/db/queries";
 import { listOpenTasks as realListOpenTasks, finishUpload as realFinishUpload } from "@/lib/db/queries";
 import type { TaskRow, UploadClassifiedAs, UploadRow, UserRow } from "@/lib/db/types";
 import { getMetaClient } from "@/lib/meta/index";
 import type { MetaClient } from "@/lib/meta/client";
+import { BudgetExceededError } from "@/lib/meta/client";
 import { dueLocalToUtc } from "@/lib/pipeline/dates";
 import { executeOps, type ExecuteResult } from "@/lib/pipeline/execute";
 import {
@@ -15,6 +18,16 @@ import {
   type Op,
   type ReconcileAction,
 } from "@/lib/pipeline/reconcile";
+import {
+  attachDocumentStarter,
+  createStartersDeps,
+  runMathDiagnosis,
+  type StartersDeps,
+  type StarterReplyInfo,
+  type StarterFailureReason,
+} from "@/lib/pipeline/starters";
+import { EmptyChecklistError } from "@/lib/starters/checklist";
+import { FlashcardsTooThinError, NoStudyMaterialError } from "@/lib/starters/flashcards";
 import { understand } from "@/lib/pipeline/understand";
 import type { UnderstandAction, UnderstandOutput } from "@/lib/pipeline/understand";
 
@@ -24,8 +37,10 @@ export type IngestDeps = {
   executeOps: (ops: Op[], ctx: { userId: string; uploadId: string }) => Promise<ExecuteResult>;
   finishUpload: (id: string, patch: FinishUploadPatch) => Promise<void>;
   now: () => Date;
-  // Plugged in by a later card: real math diagnosis. Returning a string lets
-  // that card hand back reply text; unused for now.
+  // Starter orchestration deps (defaults built lazily in createIngestDeps).
+  starters?: StartersDeps;
+  // Legacy hook from before the built-in math diagnosis existed; still fired
+  // for observers, its return value is unused.
   onMathWorking?: (input: MathWorkingInput) => Promise<string | null>;
 };
 
@@ -41,6 +56,9 @@ export type IngestInput = {
   upload: UploadRow;
   text?: string | null;
   image?: { base64: string; mimeType?: string };
+  // Normalised image bytes for the math annotator; the base64 image above
+  // stays the understanding input.
+  imageMeta?: { buffer: Buffer; width: number; height: number };
   pdf?: { base64: string; filename: string; tooManyPages?: boolean };
   // Storage path of the original file, uploaded by the handler after the
   // upload row existed. Written into the row here so the DB stays truthful.
@@ -54,8 +72,12 @@ export type IngestOutcome =
       clarification: string | null;
       inputKind: UnderstandOutput["input_kind"];
       pdfTruncated: boolean;
+      starter: StarterReplyInfo | null;
     }
   | { kind: "nothing"; clarification: string | null }
+  | { kind: "math"; caption: string; annotated: Buffer | null; practiceText: string | null; extra: string | null }
+  // No longer produced by the default flow; kept for callers that inject no
+  // starters deps or no image bytes for a math upload.
   | { kind: "math_pending" };
 
 // understand's input_kind vocabulary maps onto uploads.classified_as; a plain
@@ -76,6 +98,11 @@ export function createIngestDeps(overrides: Partial<IngestDeps> = {}): IngestDep
     executeOps: (ops, ctx) => executeOps(ops, ctx),
     finishUpload: realFinishUpload,
     now: () => new Date(),
+    // Built on first access: the real deps only resolve the Meta and Supabase
+    // clients inside their functions, so nothing is read at import time.
+    get starters() {
+      return createStartersDeps();
+    },
     ...overrides,
   };
 }
@@ -126,15 +153,27 @@ export async function ingestContent(deps: IngestDeps, input: IngestInput): Promi
     });
 
   if (output.input_kind === "math_working") {
-    // Math diagnosis is a later card; no reconcile, no task writes.
     await deps.onMathWorking?.({
       user: input.user,
       upload: input.upload,
       image: input.image,
       text: input.text,
     });
+    if (deps.starters == null || input.imageMeta == null) {
+      // Nothing to diagnose with: keep the legacy pending outcome.
+      await finishDone("math_working");
+      return { kind: "math_pending" };
+    }
+    // Diagnosis errors propagate on purpose: no task is written before the
+    // model call succeeds, so failing the upload here loses nothing.
+    const math = await runMathDiagnosis(deps.starters, {
+      user: input.user,
+      upload: input.upload,
+      image: input.imageMeta,
+      caption: input.text ?? null,
+    });
     await finishDone("math_working");
-    return { kind: "math_pending" };
+    return { kind: "math", ...math.outcome };
   }
 
   const actions = output.actions.map((action) => toReconcileAction(action, refToTaskId));
@@ -143,20 +182,86 @@ export async function ingestContent(deps: IngestDeps, input: IngestInput): Promi
     userId: input.user.id,
     uploadId: input.upload.id,
   });
+
+  const { starter, created } = await attachStarterIfDocument(deps, input, output.input_kind, result);
   await finishDone(CLASSIFIED_AS[output.input_kind]);
 
+  // A slides-only upload can gain its revision task inside the starter step;
+  // fold it into the created list so the reply shows it like any other task.
   const hasWrites =
-    result.created.length > 0 || result.updated.length > 0 || result.completed.length > 0;
+    created.length > 0 || result.updated.length > 0 || result.completed.length > 0;
   if (!hasWrites && result.clarify.length === 0) {
     return { kind: "nothing", clarification: output.needs_clarification };
   }
   return {
     kind: "tasks",
-    result,
+    result: { ...result, created },
     clarification: output.needs_clarification,
     inputKind: output.input_kind,
     pdfTruncated: input.pdf?.tooManyPages ?? false,
+    starter,
   };
+}
+
+// Checklist for briefs, flashcards for slides, and only ever for PDF uploads.
+// Never throws (budget excepted, see inside): the capture already succeeded.
+async function attachStarterIfDocument(
+  deps: IngestDeps,
+  input: IngestInput,
+  inputKind: UnderstandOutput["input_kind"],
+  result: ExecuteResult,
+): Promise<{ starter: StarterReplyInfo | null; created: TaskRow[] }> {
+  const created = [...result.created];
+  if (
+    deps.starters == null ||
+    input.pdf == null ||
+    (inputKind !== "assignment_brief" && inputKind !== "lecture_slides")
+  ) {
+    return { starter: null, created };
+  }
+
+  const attempt = await attachDocumentStarter(deps.starters, {
+    user: input.user,
+    upload: input.upload,
+    pdf: { base64: input.pdf.base64, filename: input.pdf.filename },
+    inputKind,
+    created: result.created,
+    updated: result.updated,
+  });
+
+  if ("summary" in attempt) {
+    if (!created.some((task) => task.id === attempt.task.id)) created.push(attempt.task);
+    return {
+      starter:
+        attempt.summary.type === "checklist"
+          ? { status: "made", type: "checklist", count: attempt.summary.count }
+          : {
+              status: "made",
+              type: "flashcards",
+              count: attempt.summary.count,
+              secondaryCount: attempt.summary.secondaryCount,
+            },
+      created,
+    };
+  }
+  if ("skipped" in attempt) return { starter: null, created };
+
+  if (attempt.task != null && !created.some((task) => task.id === attempt.task!.id)) {
+    created.push(attempt.task);
+  }
+  // A budget refusal with nothing written yet is rethrown so the handler shows
+  // the budget reply; once a task exists, isolating wins over failing.
+  const tasksWritten =
+    created.length > 0 || result.updated.length > 0 || result.completed.length > 0;
+  if (attempt.error instanceof BudgetExceededError && !tasksWritten) throw attempt.error;
+  return { starter: { status: "failed", reason: starterFailureReason(attempt.error) }, created };
+}
+
+function starterFailureReason(error: unknown): StarterFailureReason {
+  if (error instanceof EmptyChecklistError) return "empty_checklist";
+  if (error instanceof NoStudyMaterialError) return "no_study_material";
+  if (error instanceof FlashcardsTooThinError) return "too_thin";
+  return "generic";
 }
 
 function toUnderstandOpenTask(task: TaskRow) {

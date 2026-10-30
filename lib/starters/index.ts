@@ -1,12 +1,16 @@
 // Starter dispatcher. pickStarterType maps an upload's classification to the
 // starter it should produce; STARTER_GENERATORS holds the implementations.
-// Only checklist exists today: T09 registers flashcards and T10 registers
-// math_diagnosis, so unmapped or unregistered types yield null and the
-// caller skips the starter step.
+// Checklist and flashcards are PDF-shaped (one document in, content out), so
+// they live here. math_diagnosis does not fit that dispatcher: it takes an
+// image plus annotation and storage work, so lib/pipeline/starters.ts runs it
+// directly instead of going through this registry. review_practice is never
+// uploaded-sourced either: the weak-spot tracker creates those. Unmapped or
+// unregistered types yield null and the caller skips the starter step.
 
 import type { StarterType } from '@/lib/db/types';
 import type { MetaClient, Usage } from '@/lib/meta/client';
 import { generateChecklist } from './checklist';
+import { generateFlashcards } from './flashcards';
 
 export type StarterTaskContext = {
   title: string;
@@ -69,10 +73,19 @@ export const STARTER_GENERATORS: Partial<Record<StarterType, StarterGenerator>> 
     });
     return { content, usage };
   },
+  flashcards: async (deps, input) => {
+    if (input.pdf == null) return null;
+    const { content, usage } = await generateFlashcards(deps, {
+      userId: input.userId,
+      task: input.task,
+      pdf: input.pdf,
+    });
+    return { content, usage };
+  },
 };
 
-// Wiring hook for later cards: T09 and T10 add their generators through this
-// instead of editing the registry literal above.
+// Wiring hook for starter types added outside the registry literal above
+// (tests and later cards use this instead of editing the object).
 export function registerStarterGenerator(type: StarterType, generator: StarterGenerator): void {
   STARTER_GENERATORS[type] = generator;
 }

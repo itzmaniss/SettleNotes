@@ -110,13 +110,8 @@ describe('generateStarterFor', () => {
         inputFor({ classified_as: 'chat_screenshot' }),
       ),
     ).toBeNull();
-    // flashcards and math_diagnosis have no generator until T09/T10.
-    expect(
-      await generateStarterFor(
-        { generateObject: fake.generateObject },
-        inputFor({ classified_as: 'lecture_slides' }),
-      ),
-    ).toBeNull();
+    // math_diagnosis does not fit the PDF-shaped dispatcher; it runs through
+    // lib/pipeline/starters.ts instead. Flashcards are registered now.
     expect(
       await generateStarterFor(
         { generateObject: fake.generateObject },
@@ -158,8 +153,8 @@ describe('generateStarterFor', () => {
     }
   });
 
-  test('STARTER_GENERATORS only registers checklist today', () => {
+  test('STARTER_GENERATORS registers checklist and flashcards', () => {
     const registered = Object.keys(STARTER_GENERATORS).sort() as StarterType[];
-    expect(registered).toEqual(['checklist']);
+    expect(registered).toEqual(['checklist', 'flashcards']);
   });
 });

@@ -1,9 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import type { FinishUploadPatch, InsertTaskInput, InsertTaskEventInput, UpdateTaskPatch } from "../../lib/db/queries";
+import sharp from "sharp";
+import type {
+  FinishUploadPatch,
+  InsertStarterInput,
+  InsertTaskEventInput,
+  InsertTaskInput,
+  UpdateTaskPatch,
+} from "../../lib/db/queries";
 import type { TaskRow, UploadRow, UserRow } from "../../lib/db/types";
 import type { GenerateObjectOptions, MetaClient } from "../../lib/meta/client";
 import { executeOps } from "../../lib/pipeline/execute";
 import { createIngestDeps, ingestContent, type IngestDeps, type IngestInput } from "../../lib/pipeline/ingest";
+import type { StartersDeps } from "../../lib/pipeline/starters";
 import type { UnderstandOutput } from "../../lib/pipeline/understand";
 import { summaryReply } from "../../lib/telegram/replies";
 
@@ -379,6 +387,230 @@ describe("ingestContent: create, clarify and nothing branches", () => {
     expect(outcome).toEqual({ kind: "nothing", clarification: null });
     expect(fakeDb.updates).toHaveLength(0);
     expect(fakeDb.inserts).toHaveLength(0);
+  });
+});
+
+describe("ingestContent: starter wiring end to end", () => {
+  const BRIEF_OUTPUT: UnderstandOutput = {
+    input_kind: "assignment_brief",
+    extracted_text: "lab 4 brief",
+    actions: [
+      {
+        type: "create",
+        task_ref: null,
+        title: "CS2030 Lab 4",
+        course: "CS2030",
+        kind: "assignment",
+        due_local: "2026-11-06T23:59",
+        effort: null,
+        evidence: "submit lab 4 by friday",
+        confidence: 0.9,
+      },
+    ],
+    needs_clarification: null,
+  };
+
+  function makeStarterDepsFake(generateObject: MetaClient["generateObject"]) {
+    const startersInserted: InsertStarterInput[] = [];
+    const starters: StartersDeps = {
+      generateObject,
+      insertTask: async () => {
+        throw new Error("fallback task creation is not expected in this test");
+      },
+      insertTaskEvent: async () => {},
+      insertStarter: async (i) => {
+        startersInserted.push(i);
+        return {
+          id: `starter-${startersInserted.length}`,
+          task_id: i.taskId,
+          type: i.type,
+          content: i.content,
+          annotated_image_path: i.annotatedImagePath ?? null,
+          created_at: NOW.toISOString(),
+        };
+      },
+      uploadBuffer: async () => {},
+      now: () => NOW,
+    };
+    return { starters, startersInserted };
+  }
+
+  test("a PDF assignment brief creates the task, inserts the checklist starter and the reply carries the checklist line", async () => {
+    const calls: GenerateObjectOptions<unknown>[] = [];
+    const briefItems = Array.from({ length: 9 }, (_, i) => ({
+      id: `raw-${i + 1}`,
+      text: `Requirement ${i + 1}`,
+      category: "deliverable" as const,
+      page: i + 1,
+      done: true,
+    }));
+    const generateObject: MetaClient["generateObject"] = async (opts) => {
+      calls.push(opts as GenerateObjectOptions<unknown>);
+      const data = opts.purpose === "understand" ? BRIEF_OUTPUT : { items: briefItems };
+      return { data: data as never, usage: USAGE };
+    };
+    const fakeDb = makeFakeDb([]);
+    const { starters, startersInserted } = makeStarterDepsFake(generateObject);
+    const deps: IngestDeps = {
+      ...createIngestDeps(),
+      generateObject,
+      ...fakeDb,
+      starters,
+      now: () => NOW,
+    };
+
+    const outcome = await ingestContent(
+      deps,
+      makeInput({ pdf: { base64: "JVBERi0=", filename: "lab4-brief.pdf" }, text: null }),
+    );
+
+    expect(outcome.kind).toBe("tasks");
+    if (outcome.kind !== "tasks") return;
+    expect(outcome.inputKind).toBe("assignment_brief");
+
+    // The task was captured normally...
+    expect(fakeDb.inserts).toHaveLength(1);
+    expect(fakeDb.inserts[0]).toMatchObject({
+      title: "CS2030 Lab 4",
+      kind: "assignment",
+      origin: "capture",
+      sourceUploadId: "upload-1",
+    });
+    expect(fakeDb.events[0]).toMatchObject({ action: "created", evidence: "submit lab 4 by friday" });
+
+    // ...and the checklist starter was inserted against it.
+    expect(calls.some((c) => c.purpose === "checklist")).toBe(true);
+    expect(startersInserted).toHaveLength(1);
+    expect(startersInserted[0]).toMatchObject({ taskId: "new-1", type: "checklist" });
+    expect((startersInserted[0].content as { items: unknown[] }).items).toHaveLength(9);
+
+    // The upload finished done as a brief and the reply has the starter line.
+    expect(fakeDb.finished).toEqual([
+      { id: "upload-1", patch: { status: "done", classifiedAs: "assignment_brief", storagePath: null } },
+    ]);
+    expect(outcome.starter).toEqual({ status: "made", type: "checklist", count: 9 });
+
+    const reply = summaryReply(outcome);
+    expect(reply).toContain("Added 1 task:");
+    expect(reply).toContain("- CS2030 Lab 4 (due Fri 6 Nov, 11:59pm)");
+    expect(reply).toContain("I also made a checklist of 9 things to hand in. Tick them off on your dashboard.");
+    assertNoDashes(reply);
+  });
+
+  test("math_working with image bytes runs the diagnosis and returns the annotated math outcome", async () => {
+    const jpeg = Buffer.from(
+      await sharp({
+        create: { width: 8, height: 8, channels: 3, background: { r: 10, g: 200, b: 30 } },
+      })
+        .jpeg()
+        .toBuffer(),
+    );
+    const mathOutput: UnderstandOutput = {
+      input_kind: "math_working",
+      extracted_text: "x + 2 = 5",
+      actions: [],
+      needs_clarification: null,
+    };
+    const DIAGNOSIS = {
+      steps: [
+        { index: 1, latex_or_text: "x + 2 = 5", bbox: { x1: 50, y1: 50, x2: 300, y2: 120 } },
+        { index: 2, latex_or_text: "x = 5 - 2 = 2", bbox: { x1: 100, y1: 200, x2: 400, y2: 300 } },
+      ],
+      is_correct: false,
+      first_error_step: 2,
+      what_went_wrong: "5 - 2 is 3, not 2",
+      misconception: { topic: "sign_errors", detail: "the subtraction slipped" },
+      correct_next_step: "x = 3",
+      final_answer_check: "The answer should be x = 3.",
+      practice: [{ question: "7 - 3 = ?", answer: "4" }],
+    };
+    const calls: GenerateObjectOptions<unknown>[] = [];
+    const generateObject: MetaClient["generateObject"] = async (opts) => {
+      calls.push(opts as GenerateObjectOptions<unknown>);
+      const data = opts.purpose === "understand" ? mathOutput : DIAGNOSIS;
+      return { data: data as never, usage: USAGE };
+    };
+    const fakeDb = makeFakeDb();
+    const uploaded: Array<{ path: string; contentType: string }> = [];
+    const startersInserted: InsertStarterInput[] = [];
+    const mathTask: TaskRow = {
+      id: "math-task-1",
+      user_id: "user-1",
+      title: "Math check: Sign errors",
+      course: null,
+      kind: "math_practice",
+      due_at: null,
+      effort: null,
+      status: "open",
+      origin: "capture",
+      source_upload_id: "upload-1",
+      weak_spot_id: null,
+      created_at: NOW.toISOString(),
+      updated_at: NOW.toISOString(),
+    };
+    const starters: StartersDeps = {
+      generateObject,
+      insertTask: async (i) => {
+        fakeDb.inserts.push(i);
+        return mathTask;
+      },
+      insertTaskEvent: async (i) => {
+        fakeDb.events.push(i);
+      },
+      insertStarter: async (i) => {
+        startersInserted.push(i);
+        return {
+          id: "starter-1",
+          task_id: i.taskId,
+          type: i.type,
+          content: i.content,
+          annotated_image_path: i.annotatedImagePath ?? null,
+          created_at: NOW.toISOString(),
+        };
+      },
+      uploadBuffer: async (path, _buffer, contentType) => {
+        uploaded.push({ path, contentType });
+      },
+      now: () => NOW,
+    };
+    const hookInputs: unknown[] = [];
+    const deps: IngestDeps = {
+      ...createIngestDeps(),
+      generateObject,
+      ...fakeDb,
+      starters,
+      now: () => NOW,
+      onMathWorking: async (input) => {
+        hookInputs.push(input);
+        return null;
+      },
+    };
+
+    const outcome = await ingestContent(
+      deps,
+      makeInput({
+        image: { base64: jpeg.toString("base64"), mimeType: "image/jpeg" },
+        imageMeta: { buffer: jpeg, width: 8, height: 8 },
+        text: null,
+      }),
+    );
+
+    expect(outcome.kind).toBe("math");
+    if (outcome.kind !== "math") return;
+    expect(hookInputs).toHaveLength(1); // the legacy hook still fires
+    expect(calls.some((c) => c.purpose === "math")).toBe(true);
+    expect(fakeDb.inserts).toHaveLength(1);
+    expect(fakeDb.inserts[0]).toMatchObject({ title: "Math check: Sign errors", kind: "math_practice" });
+    expect(fakeDb.events[0]).toMatchObject({ action: "created", evidence: "5 - 2 is 3, not 2" });
+    expect(startersInserted).toHaveLength(1);
+    expect(startersInserted[0]).toMatchObject({ taskId: "math-task-1", type: "math_diagnosis" });
+    expect(uploaded).toEqual([{ path: "user-1/upload-1/annotated.jpg", contentType: "image/jpeg" }]);
+    expect(startersInserted[0].annotatedImagePath).toBe("user-1/upload-1/annotated.jpg");
+    expect(outcome.annotated).toBeInstanceOf(Buffer);
+    expect(outcome.caption).toContain("Step 2 is where it slipped: 5 - 2 is 3, not 2");
+    expect(outcome.practiceText).toContain("7 - 3 = ?");
+    expect(outcome.extra).toBeNull();
+    expect(fakeDb.finished[0].patch).toEqual({ status: "done", classifiedAs: "math_working", storagePath: null });
   });
 });
 

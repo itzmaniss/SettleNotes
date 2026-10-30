@@ -3,6 +3,7 @@
 // anywhere in this file: students read every string here.
 import { InlineKeyboard } from "grammy";
 import type { ExecuteResult } from "@/lib/pipeline/execute";
+import type { StarterReplyInfo } from "@/lib/pipeline/starters";
 
 export const REFUSAL_TEXT =
   "Hi! Settle is in private testing right now, so I can't help you yet. Come back soon.";
@@ -29,7 +30,35 @@ export function formatDue(iso: string | null): string {
 export type SummaryOutcome = {
   result: ExecuteResult;
   clarification: string | null;
+  starter?: StarterReplyInfo | null;
 };
+
+// The "I also made ..." line appended to a capture summary: one line for a
+// made starter, one plain sentence for a starter that failed. Null means say
+// nothing extra.
+export function starterLine(starter: StarterReplyInfo | null | undefined): string | null {
+  if (starter == null) return null;
+  if (starter.status === "failed") {
+    switch (starter.reason) {
+      case "empty_checklist":
+        return "I couldn't find a list of requirements in that PDF.";
+      case "no_study_material":
+        return "That PDF didn't look like study material, so I skipped the flashcards.";
+      case "too_thin":
+        return "There wasn't enough on those slides for a full set of flashcards.";
+      default:
+        return "I added the task but couldn't build the extra help this time. Try sending the file again.";
+    }
+  }
+  if (starter.type === "checklist") {
+    const things = starter.count === 1 ? "thing" : "things";
+    return `I also made a checklist of ${starter.count} ${things} to hand in. Tick them off on your dashboard.`;
+  }
+  const cards = `${starter.count} ${starter.count === 1 ? "flashcard" : "flashcards"}`;
+  const questions =
+    starter.secondaryCount === 1 ? "practice question" : "practice questions";
+  return `I also made ${cards} and ${starter.secondaryCount} ${questions} from your slides.`;
+}
 
 export function summaryReply(outcome: SummaryOutcome): string {
   const { created, updated, completed, clarify } = outcome.result;
@@ -67,6 +96,11 @@ export function summaryReply(outcome: SummaryOutcome): string {
 
   if (outcome.clarification) {
     lines.push(outcome.clarification);
+  }
+
+  const starter = starterLine(outcome.starter);
+  if (starter != null) {
+    lines.push(starter);
   }
 
   return lines.length > 0 ? lines.join("\n") : "Your list is up to date.";

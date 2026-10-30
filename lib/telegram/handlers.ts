@@ -1,5 +1,5 @@
 import "server-only";
-import type { Bot, Context, NextFunction } from "grammy";
+import { InputFile, type Bot, type Context, type NextFunction } from "grammy";
 import type { Chat, Message, User } from "grammy/types";
 import { createUpload, finishUpload, upsertUser } from "@/lib/db/queries";
 import type {
@@ -36,6 +36,10 @@ export type BotContextLike = {
   chat?: Chat;
   message?: Message;
   reply: (text: string, other?: { reply_markup?: unknown }) => Promise<unknown>;
+  replyWithPhoto: (
+    photo: InputFile,
+    other?: { caption?: string; reply_markup?: unknown },
+  ) => Promise<unknown>;
   replyWithChatAction: (action: string) => Promise<unknown>;
   api: { getFile: (fileId: string) => Promise<{ file_path?: string; file_size?: number }> };
 };
@@ -216,6 +220,8 @@ async function processMessage(ctx: BotContextLike, deps: HandlerDeps, spec: Mess
             base64: normalized.buffer.toString("base64"),
             mimeType: normalized.mimeType,
           },
+          // Same bytes with their size, for the math annotator.
+          imageMeta: { buffer: normalized.buffer, width: normalized.width, height: normalized.height },
           storagePath,
         };
       }
@@ -225,12 +231,18 @@ async function processMessage(ctx: BotContextLike, deps: HandlerDeps, spec: Mess
 
     const outcome = await deps.ingest(ingestInput);
 
+    if (outcome.kind === "math") {
+      await sendMathOutcome(ctx, outcome, deps.botToken);
+      return;
+    }
+
     let text: string;
     if (outcome.kind === "tasks") {
       text = summaryReply(outcome);
     } else if (outcome.kind === "nothing") {
       text = outcome.clarification ?? nothingFoundReply();
     } else {
+      // Legacy pending outcome; the default flow diagnoses math inline now.
       text = mathPendingReply();
     }
     if (ingestInput.pdf?.tooManyPages) {
@@ -255,6 +267,29 @@ async function processMessage(ctx: BotContextLike, deps: HandlerDeps, spec: Mess
   } finally {
     if (typingTimer !== undefined) clearInterval(typingTimer);
   }
+}
+
+// Math reply: the annotated photo (or the caption as text when there is
+// nothing to circle), then the practice questions, then any extra note from
+// the weak-spot hook. A failed photo send falls back to the caption as text
+// so the student still gets the diagnosis.
+async function sendMathOutcome(
+  ctx: BotContextLike,
+  outcome: Extract<IngestOutcome, { kind: "math" }>,
+  botToken: string,
+): Promise<void> {
+  if (outcome.annotated != null) {
+    try {
+      await ctx.replyWithPhoto(new InputFile(outcome.annotated), { caption: outcome.caption });
+    } catch (error) {
+      console.error("[telegram] photo reply failed:", messageOf(error, botToken));
+      await replySafely(ctx, outcome.caption);
+    }
+  } else {
+    await replySafely(ctx, outcome.caption);
+  }
+  if (outcome.practiceText != null) await replySafely(ctx, outcome.practiceText);
+  if (outcome.extra != null) await replySafely(ctx, outcome.extra);
 }
 
 async function replySafely(

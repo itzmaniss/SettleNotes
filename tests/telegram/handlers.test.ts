@@ -77,11 +77,13 @@ function makePdf(pageCount: number): Buffer {
 type CtxSpy = {
   ctx: BotContextLike;
   replies: Array<{ text: string; other?: { reply_markup?: unknown } }>;
+  photos: Array<{ caption?: string; bytes: number; markup: unknown }>;
   typingCount: () => number;
 };
 
 function makeCtx(message: Record<string, unknown>): CtxSpy {
   const replies: Array<{ text: string; other?: { reply_markup?: unknown } }> = [];
+  const photos: CtxSpy["photos"] = [];
   let typing = 0;
   const ctx: BotContextLike = {
     from: { id: 101, is_bot: false, first_name: "Tim" } as User,
@@ -89,6 +91,16 @@ function makeCtx(message: Record<string, unknown>): CtxSpy {
     message: message as unknown as Message,
     reply: async (text, other) => {
       replies.push({ text, other });
+      return {};
+    },
+    replyWithPhoto: async (photo, other) => {
+      // InputFile keeps the bytes in its (type-private) fileData field.
+      const fileData = (photo as unknown as { fileData?: unknown }).fileData;
+      photos.push({
+        caption: other?.caption,
+        bytes: fileData instanceof Uint8Array ? fileData.byteLength : 0,
+        markup: other?.reply_markup,
+      });
       return {};
     },
     replyWithChatAction: async () => {
@@ -99,7 +111,7 @@ function makeCtx(message: Record<string, unknown>): CtxSpy {
       getFile: async (fileId) => ({ file_path: `downloads/${fileId}`, file_size: 100 }),
     },
   };
-  return { ctx, replies, typingCount: () => typing };
+  return { ctx, replies, photos, typingCount: () => typing };
 }
 
 type DepsSpy = {
@@ -196,6 +208,7 @@ function makeDeps(overrides: {
           clarification: null,
           inputKind: "plain_message",
           pdfTruncated: false,
+          starter: null,
         }
       );
     },
@@ -441,7 +454,7 @@ describe("error handling", () => {
 });
 
 describe("math pending and other message types", () => {
-  test("math outcome replies with the math text and no writes mentioned", async () => {
+  test("the legacy math_pending outcome still gets the pending text", async () => {
     const spy = makeCtx({ text: "see my working", date: 1, chat: { id: 101, type: "private" }, from: { id: 101, is_bot: false, first_name: "Tim" } });
     const { deps } = makeDeps({ ingestOutcome: { kind: "math_pending" } });
 
@@ -468,6 +481,7 @@ describe("math pending and other message types", () => {
       chat: { id: -100, type: "channel" } as Chat,
       message: { text: "hi", date: 1, chat: { id: -100, type: "channel" } } as Message,
       reply: async () => ({}),
+      replyWithPhoto: async () => ({}),
       replyWithChatAction: async () => ({}),
       api: { getFile: async () => ({}) },
     };
@@ -476,6 +490,107 @@ describe("math pending and other message types", () => {
     await handleTextMessage(ctx, deps);
 
     expect(uploads).toHaveLength(0);
+  });
+});
+
+describe("math diagnosis replies", () => {
+  const photoMessage = {
+    photo: [{ file_id: "photo-1", width: 100, height: 100 }],
+    caption: null,
+    date: 1,
+    chat: { id: 101, type: "private" },
+    from: { id: 101, is_bot: false, first_name: "Tim" },
+  };
+
+  test("wrong working: annotated photo goes out with the caption, then the practice message", async () => {
+    const jpeg = await tinyJpeg();
+    const spy = makeCtx(photoMessage);
+    const { deps } = makeDeps({
+      fileBuffer: jpeg,
+      ingestOutcome: {
+        kind: "math",
+        caption: "Step 2 is where it slipped: 5 - 2 is 3, not 2",
+        annotated: Buffer.from("annotated-jpeg-bytes"),
+        practiceText: "1 to try:\n1. 7 - 3 = ?\n\nAnswers:\n1. 4",
+        extra: null,
+      },
+    });
+
+    await handlePhotoMessage(spy.ctx, deps);
+
+    expect(spy.photos).toHaveLength(1);
+    expect(spy.photos[0].caption).toBe("Step 2 is where it slipped: 5 - 2 is 3, not 2");
+    expect(spy.photos[0].bytes).toBe("annotated-jpeg-bytes".length);
+    expect(spy.photos[0].markup).toBeUndefined();
+    expect(spy.replies.map((r) => r.text)).toEqual(["1 to try:\n1. 7 - 3 = ?\n\nAnswers:\n1. 4"]);
+    // The practice message carries no keyboard of its own.
+    expect(spy.replies[0].other).toBeUndefined();
+  });
+
+  test("correct working: caption only, as a text reply, no photo", async () => {
+    const jpeg = await tinyJpeg();
+    const spy = makeCtx(photoMessage);
+    const { deps } = makeDeps({
+      fileBuffer: jpeg,
+      ingestOutcome: {
+        kind: "math",
+        caption: "Every step checks out. x = 3 is right.",
+        annotated: null,
+        practiceText: null,
+        extra: null,
+      },
+    });
+
+    await handlePhotoMessage(spy.ctx, deps);
+
+    expect(spy.photos).toHaveLength(0);
+    expect(spy.replies.map((r) => r.text)).toEqual(["Every step checks out. x = 3 is right."]);
+  });
+
+  test("an extra note from the weak-spot hook is appended after the caption and practice messages", async () => {
+    const jpeg = await tinyJpeg();
+    const spy = makeCtx(photoMessage);
+    const { deps } = makeDeps({
+      fileBuffer: jpeg,
+      ingestOutcome: {
+        kind: "math",
+        caption: "Every step checks out. x = 3 is right.",
+        annotated: null,
+        practiceText: "1 to try:\n1. 9 - 4 = ?",
+        extra: "I will bring sign slips back for review.",
+      },
+    });
+
+    await handlePhotoMessage(spy.ctx, deps);
+
+    // No annotated photo, so the caption goes out as a normal text reply.
+    expect(spy.replies.map((r) => r.text)).toEqual([
+      "Every step checks out. x = 3 is right.",
+      "1 to try:\n1. 9 - 4 = ?",
+      "I will bring sign slips back for review.",
+    ]);
+  });
+
+  test("a failed photo send falls back to the caption as text", async () => {
+    const jpeg = await tinyJpeg();
+    const spy = makeCtx(photoMessage);
+    const { deps } = makeDeps({
+      fileBuffer: jpeg,
+      ingestOutcome: {
+        kind: "math",
+        caption: "Step 1 is where it slipped: dropped a sign",
+        annotated: Buffer.from("annotated-jpeg-bytes"),
+        practiceText: null,
+        extra: null,
+      },
+    });
+    spy.ctx.replyWithPhoto = async () => {
+      throw new Error("telegram photo send failed");
+    };
+
+    await handlePhotoMessage(spy.ctx, deps);
+
+    expect(spy.replies.map((r) => r.text)).toEqual(["Step 1 is where it slipped: dropped a sign"]);
   });
 });
 
