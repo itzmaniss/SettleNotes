@@ -2,6 +2,20 @@
 
 Newest entry on top. Each entry: date, card(s), commit(s), gate result, live spend, decisions, next steps.
 
+## 2026-10-30 - Website: Direction C design foundation (T18a) + landing page (T18)
+- User picked Direction C ("Study Loud") from `docs/design/`; brief saved as `docs/design/MANAGER-BRIEF.md`. TASKS.md now has T12 revised (Direction C), T18a, T18, T19 (billing seams, not built), and T20-T22 (post-hackathon, do not start).
+- Manager prep (`319d9dd`): `katex` + `@types/katex`; `BILLING_ENABLED` env flag (default false, tested); design docs committed.
+- `da7fef2` T18a: tokens (light only), fonts (Unbounded, Geist, Geist Mono, Caveat), primitives in `components/settle/` (Chunk, ChunkButton via Button `variant="chunk"` + `tone`, Sticker, Check, FlipCard, Tex), `lib/billing/plans.ts` (S$7.99 / S$63.99, free quotas 3 math / 1 deck / 1 brief, Pro fair-use caps), `lib/billing/flags.ts`. Tone variants win over the card default through cva with no `!important` (fixes the mock's white-on-white CTA).
+- T18 landing page: `app/page.tsx` + `components/marketing/` + 15 tests. Gate: 387 tests, build green, `/` is static. Pricing renders only from `plans.ts` (manager grep found no price literals in components/marketing). Pro button is disabled "Coming soon" while billing is off. CTAs link to `https://t.me/<TELEGRAM_BOT_USERNAME>` read straight from `process.env`; if unset they degrade to a disabled "Bot link coming soon" button, and the page prerenders with zero env.
+- Manager visual check: production build served on a scratch port, headless Chrome at 1440px and a true 390px viewport. Matches the mock (fonts loaded, lime/ink tones correct, no overlaps). Mobile hero stacks with a small offset. Lighthouse not run yet.
+- Deviations from the mock: "For tutors" link dropped (teacher accounts are a PRD non-goal); compact "How it works" strip added so the nav link has a target; the Pro anchor sticker uses the config text "Less than a McSpicy meal."; Check uses an 8px radius (token radius made the 24px box a circle); chat card background is the literal `#dbe7f2` (no token for it).
+- Not built (by design): billing logic and `0002_billing.sql` (T19), dashboard UI (T12), terms/privacy/refund pages (T22; footer has no links to them yet).
+- Landing needs a public URL to be seen by anyone else: T16 deploy still needs the user's go-ahead. Set `TELEGRAM_BOT_USERNAME` in Vercel so the CTAs work.
+
+### Next
+1. Day 1 exit check with real screenshots (waiting on the user's friends).
+2. Day 2: T08 types, then T09 and T10 in parallel, T11, T12 (Direction C), T19.
+
 ## 2026-10-30 - T06c ingest wiring + first live eval
 - T06c done (`a6feb5d`): `lib/meta/index.ts` (lazy Meta client), `lib/pipeline/execute.ts` (op executor), `lib/pipeline/ingest.ts`, `lib/telegram/replies.ts`, `lib/telegram/handlers.ts` (text/photo/document/catch-all), `bot.ts` registers them. 306 tests, build green.
 - Bot-level allowlist middleware added as the first `bot.use` so `bun run bot:poll` is also gated by `ALLOWED_TELEGRAM_IDS` (poll mode skips the webhook route's guards).
