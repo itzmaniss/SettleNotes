@@ -2,6 +2,12 @@
 
 Newest entry on top. Each entry: date, card(s), commit(s), gate result, live spend, decisions, next steps.
 
+## 2026-10-31 - Remote set up, first push
+- `origin` = `git@github.com:itzmaniss/SettleNotes.git` (SSH; HTTPS has no stored credentials on this Mac, the `~/.ssh/github` key authenticates as `itzmaniss`). The repo is PUBLIC and was empty. Pushed `main` up to `4cf1431` on the user's explicit request after a secret scan of the full history (only fake test values and doc examples matched).
+- Commits carry the user's git identity (name and Outlook email from `git config`), so that email is now public in the repo history.
+- The standing rule "manager never pushes" is overridden only for pushes the user asks for. Ask before each later push.
+- Day 2 started: T08 (starter schemas + checklist + dispatcher) and T11 (dashboard auth) dispatched in parallel.
+
 ## 2026-10-30 - Website: Direction C design foundation (T18a) + landing page (T18)
 - User picked Direction C ("Study Loud") from `docs/design/`; brief saved as `docs/design/MANAGER-BRIEF.md`. TASKS.md now has T12 revised (Direction C), T18a, T18, T19 (billing seams, not built), and T20-T22 (post-hackathon, do not start).
 - Manager prep (`319d9dd`): `katex` + `@types/katex`; `BILLING_ENABLED` env flag (default false, tested); design docs committed.
