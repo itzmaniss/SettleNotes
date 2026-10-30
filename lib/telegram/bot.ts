@@ -1,6 +1,7 @@
 import "server-only";
 import { Bot, type BotError } from "grammy";
 import { env } from "@/lib/env";
+import { createDashboardCommand, type DashboardContextLike } from "@/lib/auth/dashboard-command";
 import { upsertUser } from "@/lib/db/queries";
 import { allowlistMiddleware, registerIngestHandlers } from "@/lib/telegram/handlers";
 import { REFUSAL_TEXT } from "@/lib/telegram/replies";
@@ -48,8 +49,9 @@ function createBot(): Bot {
   return bot;
 }
 
-// The /start and /help handlers below are final; registerIngestHandlers adds
-// the text, photo, document and catch-all message handlers after them.
+// The /start, /help and /dashboard handlers below are final;
+// registerIngestHandlers adds the text, photo, document and catch-all message
+// handlers after them.
 export function registerHandlers(bot: Bot): void {
   bot.command("start", async (ctx) => {
     const from = ctx.from;
@@ -63,6 +65,11 @@ export function registerHandlers(bot: Bot): void {
   });
 
   bot.command("help", (ctx) => ctx.reply(HELP_TEXT));
+
+  const dashboardCommand = createDashboardCommand();
+  bot.command("dashboard", (ctx) =>
+    dashboardCommand(ctx as unknown as DashboardContextLike),
+  );
 
   registerIngestHandlers(bot);
 }
@@ -91,4 +98,5 @@ const HELP_TEXT = [
   "Commands:",
   "/help - show this list",
   "/start - reintroduce myself",
+  "/dashboard - get a single use link to open your dashboard",
 ].join("\n");

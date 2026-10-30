@@ -76,7 +76,7 @@ export function createHandlerDeps(): HandlerDeps {
   return deps;
 }
 
-const KNOWN_COMMANDS = new Set(["/start", "/help"]);
+export const KNOWN_COMMANDS = new Set(["/start", "/help", "/dashboard"]);
 const DEFAULT_TYPING_INTERVAL_MS = 4_000;
 const MAX_STORED_ERROR_LENGTH = 300;
 
