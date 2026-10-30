@@ -2,6 +2,8 @@ import "server-only";
 import { Bot, type BotError } from "grammy";
 import { env } from "@/lib/env";
 import { upsertUser } from "@/lib/db/queries";
+import { allowlistMiddleware, registerIngestHandlers } from "@/lib/telegram/handlers";
+import { REFUSAL_TEXT } from "@/lib/telegram/replies";
 
 // The token is only read when getBot() first runs, never at import time, so
 // `next build` and the test runner never need env vars just to import this.
@@ -32,6 +34,13 @@ export function ensureBotReady(): Promise<Bot> {
 
 function createBot(): Bot {
   const bot = new Bot(env.TELEGRAM_BOT_TOKEN);
+  // Very first middleware: the poll script runs this bot without the webhook
+  // route's guards, so the allowlist has to live on the bot itself.
+  bot.use(
+    allowlistMiddleware(env.ALLOWED_TELEGRAM_IDS, (chatId) =>
+      bot.api.sendMessage(chatId, REFUSAL_TEXT),
+    ),
+  );
   registerHandlers(bot);
   bot.catch((error: BotError) => {
     console.error("[telegram] handler error", error.error);
@@ -39,8 +48,8 @@ function createBot(): Bot {
   return bot;
 }
 
-// T06c will grow this function into the real pipeline wiring; the /start and
-// /help handlers below are final, the plain message handler is a placeholder.
+// The /start and /help handlers below are final; registerIngestHandlers adds
+// the text, photo, document and catch-all message handlers after them.
 export function registerHandlers(bot: Bot): void {
   bot.command("start", async (ctx) => {
     const from = ctx.from;
@@ -55,8 +64,7 @@ export function registerHandlers(bot: Bot): void {
 
   bot.command("help", (ctx) => ctx.reply(HELP_TEXT));
 
-  // Placeholder until the real pipeline lands in T06c.
-  bot.on("message", (ctx) => ctx.reply("Got it"));
+  registerIngestHandlers(bot);
 }
 
 function startText(firstName: string | null, dashboardUrl: string): string {
