@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settle · Direction A · Calm Paper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Caveat:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.0.14"></script>
+<style type="text/tailwindcss">
+  /* shadcn token names, so these paste straight into app/globals.css */
+  :root {
+    --background: oklch(0.985 0.006 85);
+    --foreground: oklch(0.22 0.015 70);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.22 0.015 70);
+    --muted: oklch(0.955 0.008 85);
+    --muted-foreground: oklch(0.52 0.015 70);
+    --primary: oklch(0.42 0.08 165);
+    --primary-foreground: oklch(0.98 0.01 165);
+    --accent: oklch(0.93 0.035 165);
+    --accent-foreground: oklch(0.32 0.07 165);
+    --destructive: oklch(0.58 0.19 30);
+    --warn: oklch(0.72 0.14 70);
+    --border: oklch(0.91 0.01 80);
+    --ring: oklch(0.42 0.08 165);
+    --radius: 0.75rem;
+  }
+  @theme inline {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-warn: var(--warn);
+    --color-border: var(--border);
+    --font-sans: "Geist", ui-sans-serif, system-ui;
+    --font-display: "Bricolage Grotesque", "Geist", sans-serif;
+    --font-mono: "Geist Mono", ui-monospace;
+    --font-hand: "Caveat", cursive;
+  }
+  body { @apply bg-background text-foreground font-sans antialiased; }
+  .eyebrow { @apply font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground; }
+  .chk { @apply size-[18px] shrink-0 rounded-full border-[1.5px] border-foreground/30 grid place-items-center transition; }
+  .chk.on { @apply bg-primary border-primary; }
+  .chk.on::after { content: ""; width: 8px; height: 5px; border-left: 1.5px solid white; border-bottom: 1.5px solid white; transform: translateY(-1px) rotate(-45deg); }
+  .row { @apply flex items-start gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors hover:bg-muted; }
+  .row.sel { @apply bg-accent/70; }
+  .pill { @apply inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-[11px] text-muted-foreground; }
+  .tab { @apply px-3 py-1.5 text-sm rounded-md text-muted-foreground hover:text-foreground; }
+  .tab.on { @apply bg-card text-foreground shadow-sm ring-1 ring-border; }
+  .card3d { perspective: 1000px; }
+  .flip { transition: transform .5s cubic-bezier(.2,.7,.2,1); transform-style: preserve-3d; }
+  .card3d.flipped .flip { transform: rotateY(180deg); }
+  .face { backface-visibility: hidden; }
+  .back { transform: rotateY(180deg); }
+  @media (prefers-reduced-motion: reduce) { .flip { transition: none; } }
+</style>
+</head>
+<body>
+
+<!-- design switcher (not part of the design) -->
+<div class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex gap-1 rounded-lg bg-foreground/90 p-1 text-sm text-background shadow-lg">
+  <button data-view="landing" class="vbtn rounded-md px-3 py-1.5 bg-background text-foreground">Landing</button>
+  <button data-view="dash" class="vbtn rounded-md px-3 py-1.5">Dashboard</button>
+</div>
+
+<!-- ======================= LANDING ======================= -->
+<main id="landing">
+  <header class="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+    <a class="flex items-center gap-2 font-display text-xl font-semibold tracking-tight"><span class="grid size-7 place-items-center rounded-lg bg-primary text-primary-foreground text-sm">S</span>settle</a>
+    <nav class="hidden gap-7 text-sm text-muted-foreground md:flex"><a>How it works</a><a>For tutors</a><a>Pricing</a></nav>
+    <div class="flex items-center gap-3 text-sm"><a class="text-muted-foreground">Log in</a><a class="rounded-full bg-foreground px-4 py-2 text-background">Open in Telegram</a></div>
+  </header>
+
+  <section class="mx-auto grid max-w-6xl gap-12 px-6 pb-20 pt-16 md:grid-cols-[1.1fr_1fr] md:pt-24">
+    <div>
+      <p class="eyebrow">For students who live in Telegram</p>
+      <h1 class="mt-5 font-display text-5xl font-semibold leading-[1.02] tracking-[-0.03em] md:text-[68px]">Your group chat<br>is not a <span class="relative whitespace-nowrap">planner.<svg class="absolute -bottom-2 left-0 w-full" viewBox="0 0 200 8" preserveAspectRatio="none"><path d="M2 5 Q 50 1 100 4 T 198 3" stroke="var(--primary)" stroke-width="3" fill="none" stroke-linecap="round"/></svg></span></h1>
+      <p class="mt-7 max-w-md text-lg leading-relaxed text-muted-foreground">Forward the chaos to Settle. Screenshots, 30-page briefs, voice notes, a photo of your working. You get one calm list of what's due, and the first step of each task already done.</p>
+      <div class="mt-9 flex items-center gap-5">
+        <a class="rounded-full bg-primary px-6 py-3 font-medium text-primary-foreground shadow-sm">Start on Telegram</a>
+        <a class="text-sm font-medium underline-offset-4 hover:underline">See a real example ↓</a>
+      </div>
+    </div>
+    <!-- hero proof: one Telegram exchange -->
+    <div class="relative">
+      <div class="rounded-2xl border border-border bg-card p-4 shadow-[0_30px_60px_-30px_rgb(60_40_20/0.25)]">
+        <div class="flex items-center gap-2 border-b border-border pb-3 text-sm"><span class="grid size-8 place-items-center rounded-full bg-primary text-xs text-primary-foreground">S</span><div><p class="font-medium leading-none">Settle</p><p class="text-[11px] text-muted-foreground">bot</p></div></div>
+        <div class="space-y-3 py-4 text-[14px]">
+          <div class="ml-auto w-fit max-w-[80%] rounded-2xl rounded-br-md bg-[#e2f4d4] px-3.5 py-2">prof say extend to nxt fri liao</div>
+          <div class="w-fit max-w-[88%] rounded-2xl rounded-bl-md bg-muted px-3.5 py-2.5">
+            <p>Moved <b>CS2040 Lab 4</b> to <b>Fri 13 Nov, 23:59</b>.</p>
+            <p class="mt-1 text-muted-foreground">Was Wed 4 Nov. No new task created.</p>
+            <a class="mt-2.5 block rounded-lg bg-card py-1.5 text-center text-[13px] font-medium text-primary ring-1 ring-border">Open dashboard</a>
+          </div>
+        </div>
+      </div>
+      <p class="mt-4 pl-1 font-hand text-xl text-muted-foreground">↑ understands Singlish. updates, never duplicates.</p>
+    </div>
+  </section>
+
+  <!-- before / after -->
+  <section class="border-y border-border bg-muted/60">
+    <div class="mx-auto max-w-6xl px-6 py-20">
+      <p class="eyebrow">01 · Capture</p>
+      <h2 class="mt-3 max-w-xl font-display text-4xl font-semibold tracking-tight">Forty messages in. Three deadlines out.</h2>
+      <div class="mt-12 grid items-center gap-6 md:grid-cols-[1fr_auto_1fr]">
+        <div class="rounded-2xl bg-[#d9e4ec] p-4 text-[13.5px]">
+          <p class="mb-3 text-center text-[11px] text-slate-500">CS2040 grp · 43 unread</p>
+          <div class="space-y-1.5">
+            <p class="w-fit rounded-xl bg-white px-3 py-1.5"><b class="text-sky-700">Wei Jie</b> eh lab 4 due when ah</p>
+            <p class="w-fit rounded-xl bg-white px-3 py-1.5"><b class="text-rose-700">Priya</b> wed 2359 i think</p>
+            <p class="w-fit rounded-xl bg-white px-3 py-1.5"><b class="text-amber-700">Marcus</b> anyone done q3 or not</p>
+            <p class="w-fit rounded-xl bg-white px-3 py-1.5"><b class="text-sky-700">Wei Jie</b> no lor 😭</p>
+            <p class="w-fit rounded-xl bg-white px-3 py-1.5"><b class="text-amber-700">Marcus</b> prof say extend to nxt fri liao</p>
+            <p class="w-fit rounded-xl bg-white px-3 py-1.5"><b class="text-rose-700">Priya</b> also MA1521 quiz 2 this thurs dont forget</p>
+            <p class="w-fit rounded-xl bg-white px-3 py-1.5"><b class="text-sky-700">Wei Jie</b> GEA report draft by sun can?</p>
+          </div>
+        </div>
+        <div class="hidden font-hand text-3xl text-primary md:block">settle →</div>
+        <div class="space-y-2.5">
+          <div class="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5"><span class="chk"></span><div class="flex-1"><p class="font-medium">MA1521 Quiz 2</p><p class="text-xs text-muted-foreground">Thu 5 Nov · 14 flashcards ready</p></div><span class="pill">test</span></div>
+          <div class="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5"><span class="chk"></span><div class="flex-1"><p class="font-medium">GEA1000 Report draft</p><p class="text-xs text-muted-foreground">Sun 8 Nov · checklist from brief</p></div><span class="pill">assignment</span></div>
+          <div class="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5"><span class="chk"></span><div class="flex-1"><p class="font-medium">CS2040 Lab 4</p><p class="text-xs text-muted-foreground"><s>Wed 4 Nov</s> → Fri 13 Nov</p></div><span class="pill">moved</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- starters: one big preview with tabs, not three tiles -->
+  <section class="mx-auto max-w-6xl px-6 py-24">
+    <div class="grid gap-12 md:grid-cols-[0.8fr_1.2fr]">
+      <div>
+        <p class="eyebrow">02 · First step, done</p>
+        <h2 class="mt-3 font-display text-4xl font-semibold tracking-tight">Every task shows up already started.</h2>
+        <div class="mt-8 space-y-1" id="starterTabs">
+          <button data-s="0" class="st w-full rounded-xl p-4 text-left bg-card ring-1 ring-border"><p class="font-medium">Assignment brief → checklist</p><p class="mt-1 text-sm text-muted-foreground">Deliverables, submission rules and rubric points, each with its page number.</p></button>
+          <button data-s="1" class="st w-full rounded-xl p-4 text-left"><p class="font-medium">Lecture slides → flashcards</p><p class="mt-1 text-sm text-muted-foreground">Cards and practice questions from your own slides, not the internet's.</p></button>
+          <button data-s="2" class="st w-full rounded-xl p-4 text-left"><p class="font-medium">Photo of working → the wrong step</p><p class="mt-1 text-sm text-muted-foreground">Not just "wrong answer". The exact line, the misconception, and 3 questions on it.</p></button>
+        </div>
+      </div>
+      <div class="rounded-2xl border border-border bg-card p-6 md:p-8" id="starterPanes">
+        <div class="sp">
+          <p class="eyebrow">GEA1000 Report draft · from brief.pdf (31 pages)</p>
+          <ul class="mt-5 space-y-3 text-[15px]">
+            <li class="flex gap-3"><span class="chk on"></span><span class="flex-1 text-muted-foreground line-through">1,500 words max, excluding references</span><span class="font-mono text-xs text-muted-foreground">p.4</span></li>
+            <li class="flex gap-3"><span class="chk on"></span><span class="flex-1 text-muted-foreground line-through">Submit as PDF on Canvas, named GroupNo_Draft.pdf</span><span class="font-mono text-xs text-muted-foreground">p.5</span></li>
+            <li class="flex gap-3"><span class="chk"></span><span class="flex-1">At least 2 visualisations with captions</span><span class="font-mono text-xs text-muted-foreground">p.9</span></li>
+            <li class="flex gap-3"><span class="chk"></span><span class="flex-1">State one limitation of the dataset (rubric, 10%)</span><span class="font-mono text-xs text-muted-foreground">p.22</span></li>
+            <li class="flex gap-3"><span class="chk"></span><span class="flex-1">Peer contribution form, signed by all members</span><span class="font-mono text-xs text-muted-foreground">p.28</span></li>
+          </ul>
+        </div>
+        <div class="sp hidden">
+          <p class="eyebrow">MA1521 Quiz 2 · from Lecture 6.pdf · card 3 of 14</p>
+          <div class="card3d mt-6 h-56 cursor-pointer" onclick="this.classList.toggle('flipped')">
+            <div class="flip relative h-full">
+              <div class="face absolute inset-0 grid place-items-center rounded-xl bg-muted p-6 text-center"><div><p class="text-lg">When do you need the chain rule?</p><p class="mt-4 text-xs text-muted-foreground">tap to flip</p></div></div>
+              <div class="face back absolute inset-0 grid place-items-center rounded-xl bg-accent p-6 text-center"><div><p class="text-lg" data-tex="\frac{d}{dx}f(g(x)) = f'(g(x))\,g'(x)"></p><p class="mt-3 text-sm text-accent-foreground">Whenever one function sits inside another. Slide 12.</p></div></div>
+            </div>
+          </div>
+          <div class="mt-5 flex justify-between text-sm"><button class="rounded-full px-4 py-2 ring-1 ring-border">Again</button><button class="rounded-full bg-primary px-4 py-2 text-primary-foreground">Got it</button></div>
+        </div>
+        <div class="sp hidden">
+          <p class="eyebrow">Diagnosis · photo sent 9:42pm</p>
+          <div class="mt-5 grid gap-5 md:grid-cols-2">
+            <div class="relative rounded-lg bg-[repeating-linear-gradient(#fffdf6_0_27px,#dfe7f1_27px_28px)] p-4 font-hand text-[22px] leading-[28px] text-slate-700 ring-1 ring-border">
+              <p>y = x² sin x</p>
+              <p class="relative">dy/dx = (2x)(cos x)<span class="absolute -inset-x-2 -inset-y-0.5 rounded border-2 border-destructive"></span></p>
+              <p>= 2x cos x</p>
+            </div>
+            <div class="text-sm">
+              <p class="font-medium text-destructive">Step 2 is where it breaks</p>
+              <p class="mt-1 text-muted-foreground">You differentiated both factors and multiplied them. The product rule adds two terms.</p>
+              <div class="mt-3 rounded-lg bg-muted p-3" data-tex="\frac{dy}{dx} = 2x\sin x + x^2\cos x"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- loop -->
+  <section class="bg-foreground text-background">
+    <div class="mx-auto grid max-w-6xl gap-10 px-6 py-20 md:grid-cols-2">
+      <div>
+        <p class="eyebrow !text-background/50">03 · The loop</p>
+        <h2 class="mt-3 font-display text-4xl font-semibold tracking-tight">Mistakes come back as tasks, before the exam does.</h2>
+      </div>
+      <ol class="space-y-5 text-background/80">
+        <li class="flex gap-4"><span class="font-mono text-background/40">1</span>Settle spots the misconception in your working.</li>
+        <li class="flex gap-4"><span class="font-mono text-background/40">2</span>It logs a weak spot: <i>product rule</i>.</li>
+        <li class="flex gap-4"><span class="font-mono text-background/40">3</span>A review task lands in your list in 3 days. Miss it again and it comes back sooner.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="mx-auto max-w-6xl px-6 py-24">
+    <h2 class="font-display text-5xl font-semibold tracking-tight">Spend the energy on learning,<br><span class="text-muted-foreground">not remembering.</span></h2>
+    <a class="mt-8 inline-block rounded-full bg-primary px-6 py-3 font-medium text-primary-foreground">Start on Telegram</a>
+  </section>
+  <footer class="mx-auto flex max-w-6xl justify-between border-t border-border px-6 py-8 text-sm text-muted-foreground"><span>settle</span><span>Made in Singapore</span></footer>
+</main>
+
+<!-- ======================= DASHBOARD ======================= -->
+<main id="dash" class="hidden h-screen">
+  <div class="grid h-full grid-cols-[220px_1fr_420px]">
+    <aside class="flex flex-col border-r border-border bg-muted/50 p-3 text-sm">
+      <a class="flex items-center gap-2 px-2 py-2 font-display text-lg font-semibold"><span class="grid size-6 place-items-center rounded-md bg-primary text-xs text-primary-foreground">S</span>settle</a>
+      <div class="mt-3 flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-muted-foreground">⌕ <span>Search</span><kbd class="ml-auto font-mono text-[10px]">⌘K</kbd></div>
+      <nav class="mt-4 space-y-0.5">
+        <a class="flex justify-between rounded-md bg-card px-2.5 py-1.5 font-medium ring-1 ring-border">Today <span class="text-muted-foreground">3</span></a>
+        <a class="flex justify-between rounded-md px-2.5 py-1.5 text-muted-foreground">All tasks <span>9</span></a>
+        <a class="flex justify-between rounded-md px-2.5 py-1.5 text-muted-foreground">Weak spots <span class="text-destructive">1</span></a>
+        <a class="flex justify-between rounded-md px-2.5 py-1.5 text-muted-foreground">History</a>
+      </nav>
+      <p class="eyebrow mt-6 px-2.5">Courses</p>
+      <nav class="mt-2 space-y-0.5 text-muted-foreground">
+        <a class="block px-2.5 py-1">CS2040</a><a class="block px-2.5 py-1">MA1521</a><a class="block px-2.5 py-1">GEA1000</a>
+      </nav>
+      <div class="mt-auto rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">Forward anything to <b class="text-foreground">@SettleBot</b> to add it here.</div>
+    </aside>
+
+    <section class="overflow-y-auto px-10 py-8">
+      <div class="flex items-end justify-between">
+        <div><p class="eyebrow">Tuesday 3 Nov</p><h1 class="mt-1 font-display text-3xl font-semibold tracking-tight">Today</h1></div>
+        <p class="text-sm text-muted-foreground">2 left today. That's it.</p>
+      </div>
+
+      <h3 class="mt-8 mb-1 px-3 text-xs font-medium text-destructive">Overdue</h3>
+      <div class="row" data-task="review"><span class="chk mt-0.5"></span><div class="flex-1"><p>Review: chain rule</p><p class="mt-0.5 text-xs text-muted-foreground">MA1521 · was due yesterday · 3 practice questions</p></div><span class="pill !text-destructive">recurring</span></div>
+
+      <h3 class="mt-6 mb-1 px-3 text-xs font-medium">Today</h3>
+      <div class="row sel" data-task="diag"><span class="chk mt-0.5"></span><div class="flex-1"><p>Fix product rule mistake</p><p class="mt-0.5 text-xs text-muted-foreground">MA1521 · from your photo, 9:42pm</p></div><span class="pill">diagnosis</span></div>
+      <div class="row" data-task="read"><span class="chk on mt-0.5"></span><div class="flex-1"><p class="text-muted-foreground line-through">Skim Lecture 7 slides</p><p class="mt-0.5 text-xs text-muted-foreground">CS2040</p></div></div>
+
+      <h3 class="mt-6 mb-1 px-3 text-xs font-medium text-muted-foreground">This week</h3>
+      <div class="row" data-task="quiz"><span class="chk mt-0.5"></span><div class="flex-1"><p>MA1521 Quiz 2</p><p class="mt-0.5 text-xs text-muted-foreground">Thu 5 Nov · 14 flashcards · 4 practice questions</p></div><span class="pill">test</span></div>
+      <div class="row" data-task="brief"><span class="chk mt-0.5"></span><div class="flex-1"><p>GEA1000 Report draft</p><p class="mt-0.5 text-xs text-muted-foreground">Sun 8 Nov · checklist 2/9</p><div class="mt-2 h-1 w-40 rounded-full bg-muted"><div class="h-1 w-[22%] rounded-full bg-primary"></div></div></div><span class="pill">assignment</span></div>
+
+      <h3 class="mt-6 mb-1 px-3 text-xs font-medium text-muted-foreground">Later</h3>
+      <div class="row" data-task="lab"><span class="chk mt-0.5"></span><div class="flex-1"><p>CS2040 Lab 4</p><p class="mt-0.5 text-xs text-muted-foreground">Fri 13 Nov · <span class="text-primary">moved from Wed 4 Nov</span></p></div><span class="pill">assignment</span></div>
+    </section>
+
+    <!-- detail sheet -->
+    <aside class="overflow-y-auto border-l border-border bg-card p-7" id="sheet">
+      <div class="flex items-center gap-2"><span class="pill">MA1521</span><span class="pill">diagnosis</span><button class="ml-auto text-muted-foreground">✕</button></div>
+      <h2 class="mt-4 font-display text-2xl font-semibold tracking-tight">Fix product rule mistake</h2>
+      <p class="mt-1 text-sm text-muted-foreground">Due today · from a photo you sent at 9:42pm</p>
+
+      <div class="mt-6 flex gap-1 rounded-lg bg-muted p-1"><button class="tab on">Diagnosis</button><button class="tab">Practice (3)</button><button class="tab">History</button></div>
+
+      <div class="relative mt-5 rounded-lg bg-[repeating-linear-gradient(#fffdf6_0_27px,#dfe7f1_27px_28px)] p-4 font-hand text-[22px] leading-[28px] text-slate-700 ring-1 ring-border">
+        <p>y = x² sin x</p>
+        <p class="relative">dy/dx = (2x)(cos x)<span class="absolute -inset-x-2 -inset-y-0.5 rounded border-2 border-destructive"></span><span class="absolute -right-1 -top-3 rounded bg-destructive px-1.5 font-sans text-[10px] text-white">step 2</span></p>
+        <p>= 2x cos x</p>
+      </div>
+
+      <ol class="mt-5 space-y-2 text-sm">
+        <li class="flex gap-3 rounded-lg p-2"><span class="font-mono text-xs text-muted-foreground">1</span><span data-tex="y = x^2 \sin x"></span><span class="ml-auto text-xs text-primary">ok</span></li>
+        <li class="flex gap-3 rounded-lg bg-destructive/8 p-2 ring-1 ring-destructive/30"><span class="font-mono text-xs text-destructive">2</span><span data-tex="\frac{dy}{dx} = (2x)(\cos x)"></span><span class="ml-auto text-xs text-destructive">wrong</span></li>
+        <li class="flex gap-3 rounded-lg p-2 text-muted-foreground"><span class="font-mono text-xs">3</span><span data-tex="= 2x\cos x"></span><span class="ml-auto text-xs">follows from 2</span></li>
+      </ol>
+
+      <div class="mt-5 rounded-lg bg-muted p-4 text-sm">
+        <p class="font-medium">Misconception · Product rule</p>
+        <p class="mt-1 text-muted-foreground">Multiplied the two derivatives instead of using u′v + uv′.</p>
+        <div class="mt-3 rounded-md bg-card p-3 text-center" data-tex="\frac{d}{dx}(x^2\sin x) = 2x\sin x + x^2\cos x"></div>
+      </div>
+
+      <p class="eyebrow mt-6">Try these</p>
+      <ol class="mt-3 space-y-2 text-sm">
+        <li class="flex items-center gap-3 rounded-lg border border-border p-3"><span class="chk"></span><span data-tex="\frac{d}{dx}\left(x^3 e^x\right)"></span></li>
+        <li class="flex items-center gap-3 rounded-lg border border-border p-3"><span class="chk"></span><span data-tex="\frac{d}{dx}\left(\sqrt{x}\,\ln x\right)"></span></li>
+        <li class="flex items-center gap-3 rounded-lg border border-border p-3"><span class="chk"></span><span data-tex="\frac{d}{dx}\left(e^x \cos x\right)"></span></li>
+      </ol>
+    </aside>
+  </div>
+</main>
+
+<script>
+  document.querySelectorAll('[data-tex]').forEach(el => katex.render(el.dataset.tex, el, { throwOnError: false }));
+  document.querySelectorAll('.vbtn').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.vbtn').forEach(x => x.classList.remove('bg-background','text-foreground'));
+    b.classList.add('bg-background','text-foreground');
+    document.getElementById('landing').classList.toggle('hidden', b.dataset.view !== 'landing');
+    document.getElementById('dash').classList.toggle('hidden', b.dataset.view !== 'dash');
+    window.scrollTo(0,0);
+  });
+  document.querySelectorAll('.st').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.st').forEach(x => x.classList.remove('bg-card','ring-1','ring-border'));
+    b.classList.add('bg-card','ring-1','ring-border');
+    document.querySelectorAll('.sp').forEach((p,i) => p.classList.toggle('hidden', i != b.dataset.s));
+  });
+  document.querySelectorAll('.chk').forEach(c => c.addEventListener('click', e => { e.stopPropagation(); c.classList.toggle('on'); }));
+  document.querySelectorAll('.row').forEach(r => r.onclick = () => { document.querySelectorAll('.row').forEach(x => x.classList.remove('sel')); r.classList.add('sel'); });
+  if (location.hash === '#dash') document.querySelector('[data-view=dash]').click();
+</script>
+</body>
+</html>

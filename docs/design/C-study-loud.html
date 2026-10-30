@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settle · Direction C · Study Loud</title>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Geist:wght@400;500;600&family=Geist+Mono:wght@500&family=Caveat:wght@600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.0.14"></script>
+<style type="text/tailwindcss">
+  :root {
+    --background: oklch(0.975 0.012 120);
+    --foreground: oklch(0.2 0.02 270);
+    --card: oklch(1 0 0);
+    --muted: oklch(0.94 0.02 120);
+    --muted-foreground: oklch(0.5 0.02 270);
+    --primary: oklch(0.2 0.02 270);
+    --primary-foreground: oklch(0.97 0.01 120);
+    --accent: oklch(0.9 0.19 125);
+    --accent-foreground: oklch(0.25 0.06 130);
+    --pop: oklch(0.72 0.17 300);
+    --destructive: oklch(0.63 0.21 25);
+    --border: oklch(0.2 0.02 270);
+    --radius: 1.25rem;
+  }
+  @theme inline {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-pop: var(--pop);
+    --color-destructive: var(--destructive);
+    --color-border: var(--border);
+    --font-sans: "Geist", ui-sans-serif;
+    --font-display: "Unbounded", "Geist", sans-serif;
+    --font-mono: "Geist Mono", monospace;
+    --font-hand: "Caveat", cursive;
+  }
+  body { @apply bg-background text-foreground font-sans antialiased; }
+  /* neo-brutal: hard border + offset shadow, the "chunky" Gizmo/Jungle feel */
+  .chunk { @apply rounded-[var(--radius)] border-2 border-border bg-card shadow-[4px_4px_0_0_var(--foreground)]; }
+  .btn { @apply inline-flex items-center gap-2 rounded-full border-2 border-border px-5 py-2.5 font-semibold shadow-[3px_3px_0_0_var(--foreground)] transition active:translate-x-[3px] active:translate-y-[3px] active:shadow-none; }
+  .chk { @apply size-6 shrink-0 rounded-lg border-2 border-border grid place-items-center cursor-pointer bg-card; }
+  .chk.on { @apply bg-accent; }
+  .chk.on::after { content: ""; width: 10px; height: 6px; border-left: 2.5px solid var(--foreground); border-bottom: 2.5px solid var(--foreground); transform: translateY(-1px) rotate(-45deg); }
+  .sticker { @apply inline-block rounded-full border-2 border-border px-3 py-1 font-display text-xs font-bold; }
+  .card3d { perspective: 1200px; }
+  .flip { transition: transform .55s cubic-bezier(.3,1.4,.5,1); transform-style: preserve-3d; }
+  .card3d.flipped .flip { transform: rotateY(180deg); }
+  .face { backface-visibility: hidden; } .back { transform: rotateY(180deg); }
+  @media (prefers-reduced-motion: reduce) { .flip { transition: none; } }
+</style>
+</head>
+<body>
+<div class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex gap-1 rounded-full border-2 border-border bg-card p-1 text-sm">
+  <button data-view="landing" class="vbtn rounded-full px-4 py-1.5 bg-foreground text-background">Landing</button>
+  <button data-view="dash" class="vbtn rounded-full px-4 py-1.5">Dashboard</button>
+</div>
+
+<!-- ======================= LANDING ======================= -->
+<main id="landing">
+  <header class="mx-auto mt-4 flex max-w-6xl items-center justify-between rounded-full border-2 border-border bg-card px-5 py-2.5">
+    <a class="font-display text-xl font-extrabold tracking-tight">settle</a>
+    <nav class="hidden gap-6 text-sm font-medium md:flex"><a>How it works</a><a>For tutors</a><a>Pricing</a></nav>
+    <a class="btn !px-4 !py-1.5 bg-accent text-sm">Open in Telegram</a>
+  </header>
+
+  <section class="mx-auto grid max-w-6xl items-center gap-10 px-6 pb-16 pt-16 md:grid-cols-[1.15fr_1fr]">
+    <div>
+      <span class="sticker bg-pop/30 -rotate-2">made for SG students</span>
+      <h1 class="mt-6 font-display text-[52px] font-extrabold leading-[0.98] tracking-[-0.03em] md:text-[76px]">Stop scrolling the grp chat for deadlines.</h1>
+      <p class="mt-6 max-w-md text-lg text-muted-foreground">Forward anything to the Settle bot. Get one task list, with flashcards, checklists and fixes for your math already made.</p>
+      <div class="mt-8 flex items-center gap-4"><a class="btn bg-accent text-lg">Start on Telegram →</a><span class="font-hand text-2xl text-muted-foreground -rotate-3">it's literally a bot</span></div>
+    </div>
+    <!-- stacked cards: chat in, task out -->
+    <div class="relative h-[440px]">
+      <div class="chunk absolute left-0 top-0 w-[78%] -rotate-3 !bg-[#dbe7f2] p-4 text-sm">
+        <p class="mb-2 font-mono text-[11px] text-muted-foreground">CS2040 grp · 43 unread</p>
+        <p class="mb-1.5 w-fit rounded-xl bg-white px-3 py-1.5">eh lab 4 due when ah</p>
+        <p class="mb-1.5 w-fit rounded-xl bg-white px-3 py-1.5">prof say extend to nxt fri liao</p>
+        <p class="w-fit rounded-xl bg-white px-3 py-1.5">MA1521 quiz 2 this thurs dont forget</p>
+      </div>
+      <div class="chunk absolute bottom-6 right-0 w-[82%] rotate-2 p-5">
+        <div class="flex items-center justify-between"><p class="font-display font-bold">Your week</p><span class="sticker bg-accent">sorted</span></div>
+        <div class="mt-4 space-y-2.5 text-[15px]">
+          <div class="flex items-center gap-3"><span class="chk"></span><span class="flex-1 font-medium">MA1521 Quiz 2</span><span class="font-mono text-xs">THU</span></div>
+          <div class="flex items-center gap-3"><span class="chk"></span><span class="flex-1 font-medium">GEA1000 Report draft</span><span class="font-mono text-xs">SUN</span></div>
+          <div class="flex items-center gap-3"><span class="chk"></span><span class="flex-1 font-medium">CS2040 Lab 4</span><span class="rounded-md bg-pop/30 px-1.5 font-mono text-xs">FRI 13 ↻</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- what you get: bento with unequal weights -->
+  <section class="mx-auto max-w-6xl px-6 py-16">
+    <h2 class="font-display text-4xl font-extrabold tracking-tight">Every task comes pre-started.</h2>
+    <div class="mt-10 grid gap-6 md:grid-cols-6">
+      <div class="chunk p-6 md:col-span-4 md:row-span-2 !bg-accent/40">
+        <span class="sticker bg-card">math photo → the exact mistake</span>
+        <div class="mt-6 grid gap-6 md:grid-cols-2">
+          <div class="rounded-xl border-2 border-border bg-[repeating-linear-gradient(#fffdf6_0_27px,#dfe7f1_27px_28px)] p-4 font-hand text-[22px] leading-[28px] text-slate-700">
+            <p>y = x² sin x</p>
+            <p class="relative">dy/dx = (2x)(cos x)<span class="absolute -inset-x-2 -inset-y-0.5 rounded-full border-[3px] border-destructive"></span></p>
+            <p>= 2x cos x</p>
+          </div>
+          <div>
+            <p class="font-display text-lg font-bold">Step 2. Product rule.</p>
+            <p class="mt-2 text-sm text-muted-foreground">You multiplied the derivatives. It's u′v + uv′.</p>
+            <div class="mt-3 rounded-xl border-2 border-border bg-card p-3 text-center" data-tex="2x\sin x + x^2\cos x"></div>
+            <p class="mt-3 text-sm font-medium">+ 3 practice Qs on exactly this</p>
+          </div>
+        </div>
+      </div>
+      <div class="chunk p-5 md:col-span-2">
+        <span class="sticker bg-pop/30">slides → flashcards</span>
+        <div class="card3d mt-4 h-32 cursor-pointer" onclick="this.classList.toggle('flipped')">
+          <div class="flip relative h-full">
+            <div class="face absolute inset-0 grid place-items-center rounded-xl border-2 border-border bg-card p-4 text-center font-medium">When do you need the chain rule?</div>
+            <div class="face back absolute inset-0 grid place-items-center rounded-xl border-2 border-border bg-accent p-4 text-center text-sm">When one function sits inside another. <span class="font-mono text-[10px]">slide 12</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="chunk p-5 md:col-span-2">
+        <span class="sticker bg-card">31-page brief → checklist</span>
+        <div class="mt-4 space-y-2 text-sm">
+          <div class="flex gap-2.5"><span class="chk on !size-5"></span>1,500 words max <span class="ml-auto font-mono text-xs">p.4</span></div>
+          <div class="flex gap-2.5"><span class="chk !size-5"></span>2 charts w/ captions <span class="ml-auto font-mono text-xs">p.9</span></div>
+          <div class="flex gap-2.5"><span class="chk !size-5"></span>Peer form signed <span class="ml-auto font-mono text-xs">p.28</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- pricing: rendered from lib/billing/plans.ts in the real build -->
+  <section id="pricing" class="mx-auto max-w-6xl px-6 py-16">
+    <div class="flex flex-wrap items-end justify-between gap-4">
+      <h2 class="font-display text-4xl font-extrabold tracking-tight">Free to start.<br>Pro when it's crunch time.</h2>
+      <div class="flex rounded-full border-2 border-border bg-card p-1 text-sm font-semibold" id="billingToggle">
+        <button data-p="m" class="rounded-full bg-foreground px-4 py-1.5 text-background">Monthly</button>
+        <button data-p="y" class="rounded-full px-4 py-1.5">Yearly <span class="text-xs font-normal">save 33%</span></button>
+      </div>
+    </div>
+    <div class="mt-10 grid gap-6 md:grid-cols-[1fr_1.2fr]">
+      <div class="chunk p-7">
+        <p class="font-display text-lg font-bold">Free</p>
+        <p class="mt-3 font-display text-5xl font-extrabold">S$0</p>
+        <p class="mt-1 text-sm text-muted-foreground">forever</p>
+        <ul class="mt-6 space-y-3 text-[15px]">
+          <li class="flex gap-3"><span class="chk on !size-5"></span>Unlimited chat forwards and deadline tracking</li>
+          <li class="flex gap-3"><span class="chk on !size-5"></span>3 math diagnoses a month</li>
+          <li class="flex gap-3"><span class="chk on !size-5"></span>1 slide deck to flashcards a month</li>
+          <li class="flex gap-3"><span class="chk on !size-5"></span>1 assignment brief to checklist a month</li>
+          <li class="flex gap-3"><span class="chk on !size-5"></span>Weak-spot tracker with spaced reviews</li>
+        </ul>
+        <a class="btn mt-8 w-full justify-center bg-card">Start on Telegram</a>
+      </div>
+      <div class="chunk relative !bg-accent p-7">
+        <span class="sticker absolute -top-4 right-6 rotate-3 !bg-[oklch(0.9_0.06_300)]">cheaper than a McSpicy meal</span>
+        <p class="font-display text-lg font-bold">Pro</p>
+        <p class="mt-3 font-display text-5xl font-extrabold"><span class="price-m">S$7.99</span><span class="price-y hidden">S$63.99</span></p>
+        <p class="mt-1 text-sm text-accent-foreground"><span class="price-m">a month. Less than a McSpicy meal.</span><span class="price-y hidden">a year, about S$5.33 a month</span></p>
+        <ul class="mt-6 space-y-3 text-[15px]">
+          <li class="flex gap-3"><span class="chk on !size-5"></span>Everything in Free</li>
+          <li class="flex gap-3"><span class="chk on !size-5"></span>Unlimited math diagnoses</li>
+          <li class="flex gap-3"><span class="chk on !size-5"></span>Unlimited briefs, slides and PDFs</li>
+          </ul>
+        <a class="btn mt-8 w-full justify-center bg-foreground text-background">Get Pro</a>
+        <p class="mt-3 text-center text-xs text-accent-foreground">Upgrade anytime from your dashboard.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="mx-auto max-w-6xl px-6 py-16">
+    <div class="chunk flex flex-col items-start gap-6 !bg-foreground p-10 text-background md:flex-row md:items-center">
+      <h2 class="flex-1 font-display text-3xl font-extrabold leading-tight">Get it wrong once, Settle brings it back.<br><span class="text-accent">Get it wrong twice, it brings it back sooner.</span></h2>
+      <a class="btn bg-accent text-foreground">Try it free on Telegram</a>
+    </div>
+  </section>
+  <footer class="mx-auto max-w-6xl px-6 py-10 font-mono text-xs text-muted-foreground">settle · made in Singapore</footer>
+</main>
+
+<!-- ======================= DASHBOARD ======================= -->
+<main id="dash" class="hidden min-h-screen">
+  <header class="mx-auto mt-4 flex max-w-6xl items-center gap-4 rounded-full border-2 border-border bg-card px-5 py-2.5">
+    <a class="font-display text-lg font-extrabold">settle</a>
+    <nav class="flex gap-1 text-sm font-medium"><a class="rounded-full bg-accent px-3 py-1 border-2 border-border">Tasks</a><a class="px-3 py-1">Study</a><a class="px-3 py-1">Weak spots</a></nav>
+    <span class="ml-auto font-mono text-xs">TUE 3 NOV</span>
+  </header>
+
+  <div class="mx-auto grid max-w-6xl gap-6 px-6 py-8 md:grid-cols-[1.3fr_1fr]">
+    <!-- next up: one big card -->
+    <section>
+      <p class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Next up</p>
+      <div class="chunk mt-3 !bg-accent p-7">
+        <div class="flex items-center gap-2"><span class="sticker bg-card">MA1521</span><span class="sticker bg-destructive text-white border-border">overdue</span></div>
+        <h1 class="mt-4 font-display text-4xl font-extrabold leading-tight">Review: chain rule</h1>
+        <p class="mt-2 text-accent-foreground">3rd time this has tripped you up. 3 questions, about 10 min.</p>
+        <div class="mt-6 flex gap-3"><a class="btn bg-foreground text-background">Start review</a><a class="btn bg-card">Later</a></div>
+      </div>
+
+      <p class="mt-8 font-mono text-xs uppercase tracking-widest text-muted-foreground">This week</p>
+      <div class="mt-3 space-y-3">
+        <div class="chunk flex items-center gap-4 p-4"><span class="chk"></span><div class="flex-1"><p class="font-semibold">Fix product rule mistake</p><p class="text-sm text-muted-foreground">Today · from your photo</p></div><span class="sticker bg-pop/30">diagnosis</span></div>
+        <div class="chunk flex items-center gap-4 p-4"><span class="chk"></span><div class="flex-1"><p class="font-semibold">MA1521 Quiz 2</p><p class="text-sm text-muted-foreground">Thu 5 Nov · 14 cards ready</p></div><a class="btn !py-1 !px-3 text-sm bg-accent">Study</a></div>
+        <div class="chunk flex items-center gap-4 p-4"><span class="chk"></span><div class="flex-1"><p class="font-semibold">GEA1000 Report draft</p><div class="mt-2 h-2.5 w-48 rounded-full border-2 border-border"><div class="h-full w-[22%] rounded-full bg-accent"></div></div></div><span class="font-mono text-sm">2/9</span></div>
+        <div class="chunk flex items-center gap-4 p-4 opacity-80"><span class="chk"></span><div class="flex-1"><p class="font-semibold">CS2040 Lab 4</p><p class="text-sm text-muted-foreground">Fri 13 Nov · moved by “prof say extend to nxt fri liao”</p></div><span class="sticker bg-card">↻ moved</span></div>
+      </div>
+    </section>
+
+    <!-- study mode + weak spots -->
+    <section class="space-y-6">
+      <div>
+        <p class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Quick study · MA1521 Quiz 2</p>
+        <div class="card3d mt-3 h-64 cursor-pointer" onclick="this.classList.toggle('flipped')">
+          <div class="flip relative h-full">
+            <div class="face chunk absolute inset-0 flex flex-col p-6"><p class="font-mono text-xs text-muted-foreground">CARD 3 / 14 · LECTURE 6</p><p class="my-auto text-center font-display text-xl font-bold">What's the derivative of a function inside another function?</p><p class="text-center text-xs text-muted-foreground">tap to flip</p></div>
+            <div class="face back chunk absolute inset-0 grid place-items-center !bg-[oklch(0.9_0.06_300)] p-6"><div class="text-center"><p class="text-xl" data-tex="f'(g(x))\cdot g'(x)"></p><p class="mt-3 text-sm">Chain rule · slide 12</p></div></div>
+          </div>
+        </div>
+        <div class="mt-4 grid grid-cols-3 gap-3 text-sm font-semibold"><button class="btn justify-center bg-card">Again</button><button class="btn justify-center bg-card">Hard</button><button class="btn justify-center bg-accent">Got it</button></div>
+      </div>
+
+      <div class="chunk p-5">
+        <p class="font-display font-bold">Weak spots</p>
+        <ul class="mt-4 space-y-3 text-sm">
+          <li><div class="flex justify-between"><span class="font-medium">Chain rule</span><span class="font-mono text-xs text-destructive">3× · recurring</span></div><div class="mt-1.5 flex gap-1"><i class="h-2 flex-1 rounded-full bg-destructive"></i><i class="h-2 flex-1 rounded-full bg-destructive"></i><i class="h-2 flex-1 rounded-full bg-destructive"></i></div></li>
+          <li><div class="flex justify-between"><span class="font-medium">Product rule</span><span class="font-mono text-xs">1× · review Fri</span></div><div class="mt-1.5 flex gap-1"><i class="h-2 flex-1 rounded-full bg-pop"></i><i class="h-2 flex-1 rounded-full bg-muted"></i><i class="h-2 flex-1 rounded-full bg-muted"></i></div></li>
+        </ul>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+  document.querySelectorAll('[data-tex]').forEach(el => katex.render(el.dataset.tex, el, { throwOnError: false }));
+  document.querySelectorAll('.vbtn').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.vbtn').forEach(x => x.classList.remove('bg-foreground','text-background'));
+    b.classList.add('bg-foreground','text-background');
+    landing.classList.toggle('hidden', b.dataset.view !== 'landing');
+    dash.classList.toggle('hidden', b.dataset.view !== 'dash');
+    scrollTo(0,0);
+  });
+  document.querySelectorAll('.chk').forEach(c => c.addEventListener('click', e => { e.stopPropagation(); c.classList.toggle('on'); }));
+  document.querySelectorAll('#billingToggle button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#billingToggle button').forEach(x => x.classList.remove('bg-foreground','text-background'));
+    b.classList.add('bg-foreground','text-background');
+    document.querySelectorAll('.price-m').forEach(e => e.classList.toggle('hidden', b.dataset.p !== 'm'));
+    document.querySelectorAll('.price-y').forEach(e => e.classList.toggle('hidden', b.dataset.p !== 'y'));
+  });
+  if (location.hash === '#dash') document.querySelector('[data-view=dash]').click();
+</script>
+</body>
+</html>

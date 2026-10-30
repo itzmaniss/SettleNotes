@@ -42,6 +42,13 @@ describe("parseEnv", () => {
     expect(env.APP_BASE_URL).toBe("http://localhost:3000");
   });
 
+  test("BILLING_ENABLED defaults to false and only the string 'true' turns it on", () => {
+    expect(parseEnv(requiredOnly).BILLING_ENABLED).toBe(false);
+    expect(parseEnv({ ...requiredOnly, BILLING_ENABLED: "true" }).BILLING_ENABLED).toBe(true);
+    expect(parseEnv({ ...requiredOnly, BILLING_ENABLED: "" }).BILLING_ENABLED).toBe(false);
+    expect(() => parseEnv({ ...requiredOnly, BILLING_ENABLED: "yes" })).toThrow("BILLING_ENABLED");
+  });
+
   test("parses ALLOWED_TELEGRAM_IDS ignoring blanks", () => {
     const env = parseEnv({ ...requiredOnly, ALLOWED_TELEGRAM_IDS: "101, , 202, , " });
     expect(env.ALLOWED_TELEGRAM_IDS).toEqual([101, 202]);

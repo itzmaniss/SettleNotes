@@ -84,10 +84,34 @@ Day 1 exit check (manager, live): run `eval understand`; poll-mode bot handles a
 - Spec: ARCHITECTURE 5 magic link + session. `/dashboard` replies with a single-use link. Invalid/expired/used token -> friendly page telling the student to send /dashboard again.
 - Done when: tests for issue, consume once, expiry, reuse rejected, middleware redirect.
 
-**T12. Dashboard UI** (P3)
-- Deps: T02 (types), T08 types. Owns: `app/(dashboard)/`, `components/`, `app/globals.css`, `app/layout.tsx`.
-- Spec: PRD F5. Server components fetch via `lib/db/queries` scoped to session user (use a `getSessionUser()` from `lib/auth`, stub if T11 not merged). Groups Overdue/Today/This week/Later sorted by priority. Task card accordion renders starter by type: tickable checklist (server action updating `starters.content`), flip flashcards, diagnosis view (annotated image via signed URL, numbered steps with the wrong one highlighted, misconception, practice with reveal-answer). Task history list of `task_events` with evidence quotes. Calm design: lots of whitespace, one accent colour, dark mode via `prefers-color-scheme`. Mobile-first (students open it from Telegram on their phones).
-- Done when: `bun run build` passes; manager reviews screenshots on mobile and desktop widths using seeded data.
+**T12. Dashboard UI in Direction C** (P3, revised)
+- Deps: T02 (types), T08 types, T18a (design foundation). Owns: `app/(dashboard)/`, `components/dashboard/`. Primitives come from `components/settle/` (owned by T18a; ask the manager if one is missing).
+- Visual source of truth: `docs/design/C-study-loud.html` (Dashboard toggle) and `docs/design/shots/C-study-loud-dash.png`. Directions A and B are rejected.
+- Spec: PRD F5 data and behaviour. Server components fetch via `lib/db/queries` scoped to the session user (`getSessionUser()` from `lib/auth`, stub if T11 not merged). Layout is the mock's `#dash` view:
+  - "Next up" = the single highest-priority open task (`lib/pipeline/priority.ts`) as a lime `Chunk`, with start and later actions.
+  - "This week" list: each task is a `Chunk` row with `Check`, title, a due line and a sticker for its kind or status. A task moved by the reconciler shows a "moved" sticker and its evidence quote from `task_events`.
+  - Task detail renders the starter by type: checklist (server action updating `starters.content`), flashcards (`FlipCard` plus Again/Hard/Got it, local state only for now), math diagnosis (annotated image via signed URL, numbered `Tex` steps, wrong step ringed in destructive, misconception, practice with reveal).
+  - Weak spots panel: one row per topic, occurrences as segment pips, "recurring" at 3 or more.
+  - Header nav: Tasks / Study / Weak spots. Drop "Study" if the route does not exist by Day 3.
+  - Plan-aware but inert: read `getPlanForUser()` from `lib/billing` (T19). With billing disabled it returns `pro`, so nothing is locked. No upgrade prompts in this card, except the read-only "Plan" card described in T19.
+- Mobile first: under 768px one column in the order Next up, This week, Quick study, Weak spots. Tap targets at least 44px.
+- Done when: build green; manager screenshots at 390px and 1440px with seeded data, compared with `docs/design/shots/C-study-loud-dash.png`.
+
+**T18a. Design foundation: Direction C tokens, primitives, plan config** (sequential, lands before T18 and T12)
+- Deps: T01. Owns: `app/globals.css`, `app/layout.tsx`, `components/settle/`, `components/ui/button.tsx`, `lib/billing/plans.ts`, `lib/billing/flags.ts`, `tests/billing/`, `tests/settle/`.
+- Spec: tokens, fonts and primitives exactly as in `docs/design/MANAGER-BRIEF.md` section 1 (Unbounded, Geist, Geist Mono, Caveat; `Chunk`, `Sticker`, `Check`, `FlipCard`, `Tex`, and a `chunk` Button variant). `lib/billing/plans.ts` is the single source for plan names, prices and bullets (section 2, T19, values decided in section 4). `lib/billing/flags.ts` exports `isBillingEnabled()` reading `process.env.BILLING_ENABLED === "true"` directly (never through the full env parse, so the public landing page cannot break on an unrelated missing variable).
+- Done when: global gate green; a component test per primitive (variants, keyboard flip, reduced motion, `Check` accessibility); plans tests (shape, prices as `S$7.99` / `S$63.99`, yearly discount about 33%, fair-use caps, `anchor` nullable).
+
+**T18. Landing page in Direction C** (P3)
+- Deps: T18a. Owns: `app/page.tsx`, `components/marketing/`.
+- Visual source of truth: `docs/design/C-study-loud.html` (Landing toggle) and `docs/design/shots/C-study-loud.png`.
+- Spec: sections in order: pill nav, hero with the stacked chat-to-week cards, "Every task comes pre-started" bento (math photo large, flashcards, checklist), pricing, dark loop CTA, footer. CTAs link to `https://t.me/${TELEGRAM_BOT_USERNAME}` (read `process.env.TELEGRAM_BOT_USERNAME` directly, not through the full env parse). Nav links only to sections that exist (How it works, Pricing); the mock's "For tutors" link is dropped because teacher accounts are a PRD non-goal. Pricing renders only from `lib/billing/plans.ts` (no numbers in JSX), monthly/yearly toggle, Pro button reads "Coming soon" and is disabled while billing is off, the payment line is hidden. Real `title` and `description` metadata. Mobile first: at 390px the hero cards stop overlapping (chat card on top, task card below with a small offset).
+- Done when: global gate green; manager screenshots at 390px and 1440px compared with the mock; a test that the pricing section renders from config.
+
+**T19. Billing seams (hackathon, flag off)** (P4-ish, after T18a)
+- Deps: T02, T06c, T18a (plans.ts already landed there). Owns: `lib/billing/entitlements.ts`, `supabase/migrations/0002_billing.sql`, `tests/billing/`. The manager adds `BILLING_ENABLED` to env (done). Spec in `docs/design/MANAGER-BRIEF.md` section 2, T19: `subscriptions`, `usage_events`, `billing_events` tables, SQL function `claim_usage` with an advisory lock, `getPlanForUser`, `claimFeature` / `consumeUsage` / `releaseUsage`, pure `periodStart(now)` in Asia/Singapore, gate order (understand always runs, then claim, then the AI call, then consume or release; a failed AI call never uses quota), quota-hit reply wording in one exported constant (states the limit, points to `/dashboard`, no price, no buy or upgrade button inside Telegram).
+- Do NOT apply `0002_billing.sql` to Supabase without the user's go-ahead.
+- Done when: tests for quota allowed/hit, fair-use cap, concurrent claim, release on failure, retry idempotency, billing disabled means everyone is pro.
 
 Day 2 exit check (manager, live): `eval math` on real photos (target 4/5 correct step), checklist and flashcards on one real PDF each, dashboard walkthrough on phone.
 
@@ -116,3 +140,13 @@ Day 2 exit check (manager, live): `eval math` on real photos (target 4/5 correct
 **T17. Demo kit** (P4)
 - Deps: T13. Owns: `scripts/seed-demo.ts`, `docs/DEMO.md`, `README.md`.
 - Spec: seed a demo user with realistic tasks/history so the dashboard looks lived-in; `docs/DEMO.md` shot list matching PRD demo script with exact inputs to send; README for judges (problem, what it does, Meta models used and how, architecture diagram in text, setup). Plain human copy, no em dashes.
+
+---
+
+## Post-hackathon (written now, do not start)
+
+**T20. Telegram Stars subscription (bot).** Required before public launch: anything sold on the website must also be buyable with Stars in the bot. Stars price decided by the user at that point. `createInvoiceLink` with `currency: "XTR"`, empty `provider_token`, `subscription_period: 2592000`. Handle `pre_checkout_query` (answer within 10s) and `successful_payment`; upsert `subscriptions` (`provider='stars'`, `provider_ref=telegram_payment_charge_id`, `current_period_end` from `subscription_expiration_date`). Add `/paysupport` and `refundStarPayment`. Add `pre_checkout_query` to `allowed_updates` in `scripts/set-webhook.ts`, then re-run it with the user's go-ahead.
+
+**T21. Stripe on the web.** Dashboard-only (`/billing`). Checkout Session created per logged-in user (`client_reference_id = user.id`, metadata `user_id`); Customer Portal for cancel/update. Webhook route verifies the signature on the raw body, dedupes via `billing_events`, handles `checkout.session.completed`, `customer.subscription.updated|deleted`, `invoice.payment_failed`, upserts `subscriptions` (`provider='stripe'`). Route stays a thin wrapper; logic in `lib/billing/stripe.ts`. PayNow only for the yearly plan as a one-time charge.
+
+**T22. Launch switch.** `BILLING_ENABLED=true`, remove the allowlist, terms, privacy (PDPA) and refund pages, upgrade prompt on dashboard lock states, launch smoke test. Needs the user's go-ahead and a Telegram heads-up.

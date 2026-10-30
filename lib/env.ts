@@ -53,6 +53,10 @@ const envSchema = z.object({
   SUPABASE_DB_URL: requiredString,
   SESSION_SECRET: z.string().min(16),
   APP_BASE_URL: z.url().default("http://localhost:3000"),
+  BILLING_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
 });
 
 export type Env = z.infer<typeof envSchema>;
