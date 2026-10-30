@@ -168,6 +168,8 @@ function titleMatches(expectedTitle: string, actualTitle: string | null | undefi
 function actionMatches(exp: ExpectedAction, act: UnderstandAction): boolean {
   if (exp.type !== act.type) return false;
   for (const field of EXACT_FIELDS) {
+    // Only fields the fixture lists are checked; an explicit null means "must be null".
+    if (exp[field] === undefined) continue;
     if (norm(exp[field]) !== norm(act[field as ExactField] as string | null | undefined)) return false;
   }
   const expectedTitle = exp.title?.trim();
@@ -204,6 +206,7 @@ function mismatchHint(exp: ExpectedAction, pool: UnderstandAction[], used: Set<n
   const cand = pool[index];
   const diffs: string[] = [];
   for (const field of EXACT_FIELDS) {
+    if (exp[field] === undefined) continue;
     const e = norm(exp[field]);
     const c = norm(cand[field as ExactField] as string | null | undefined);
     if (e !== c) diffs.push(`${field}: expected ${e ?? "none"}, actual ${c ?? "none"}`);

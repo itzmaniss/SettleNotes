@@ -5,8 +5,8 @@
   "openTasks": [
     {
       "id": "task-1",
-      "title": "SC2211 Lab Report",
-      "course": "SC2211",
+      "title": "MA2001 Tutorial 5",
+      "course": "MA2001",
       "kind": "assignment",
       "due_at": "2026-11-06T15:59:00.000Z"
     }

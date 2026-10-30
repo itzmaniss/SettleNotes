@@ -2,6 +2,21 @@
 
 Newest entry on top. Each entry: date, card(s), commit(s), gate result, live spend, decisions, next steps.
 
+## 2026-10-30 - T06c ingest wiring + first live eval
+- T06c done (`a6feb5d`): `lib/meta/index.ts` (lazy Meta client), `lib/pipeline/execute.ts` (op executor), `lib/pipeline/ingest.ts`, `lib/telegram/replies.ts`, `lib/telegram/handlers.ts` (text/photo/document/catch-all), `bot.ts` registers them. 306 tests, build green.
+- Bot-level allowlist middleware added as the first `bot.use` so `bun run bot:poll` is also gated by `ALLOWED_TELEGRAM_IDS` (poll mode skips the webhook route's guards).
+- Dashboard button only attaches when `APP_BASE_URL` is https and not localhost (Telegram rejects localhost button URLs). Locally replies go without a button.
+- Live eval `bun run eval -- understand --live`, three runs: first 3/13 (harness bug), then 12/13, final 13/13. Cost per run about $0.04-0.05 (13 calls, ~19k input tokens of which ~17k cached, ~8k output). Total live spend so far about $0.13.
+  - Harness bug fixed by the manager: `scripts/eval-match.ts` compared fixture fields it did not list against null, so correct answers failed. Now only listed fields are checked; explicit null still means must-be-null (regression test added).
+  - Fixture change: `singlish-filler-heavy` had an open task "SC2211 Lab Report" next to a message about "proj report", so the model correctly asked a clarifying question. Changed the open task to an unrelated "MA2001 Tutorial 5". Intent of the fixture (Singlish filler, "this Wed" said on a Friday) unchanged.
+  - Prompt caching works: about 90% of input tokens cached after the first call.
+- Left for later cards: math diagnosis behind `onMathWorking` (T10), starters on created tasks (T08, T09), real dashboard link (T11), rate limits and `/tasks` (T15), voice (T14).
+- Not yet done: poll-mode bot run against the dev DB with a real screenshot and the Singlish extend flow (rest of the Day 1 exit check).
+
+### Next
+1. Day 1 exit check: `bun run bot:poll` (long polling, uses dev DB, spends a few cents), send a real chat screenshot and "prof say extend lab 4 to nxt fri liao" from an allowlisted Telegram account. Needs the user at the phone.
+2. Day 2: T08 types first, then T09 and T10 in parallel, T11, T12.
+
 ## 2026-10-30 - Migration applied + group P2 (T06a, T06b, T07)
 - Migration `0001_init.sql` applied (single transaction) to the Supabase project in `SUPABASE_DB_URL`: it was an empty Postgres 17 with no public tables. Result: 9 tables, RLS on for all, 0 policies. Applied with explicit user go-ahead. No Telegram heads-up was sent (no Telegram tool in the manager session).
 - Storage bucket `uploads` does NOT exist yet (T00-H item, not created by the manager). Needed for the Day 1 live check.

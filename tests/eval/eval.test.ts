@@ -51,6 +51,14 @@ function runMatch(expectedActions: Parameters<typeof matchUnderstand>[0]["action
 }
 
 describe("matchUnderstand", () => {
+  test("fields the fixture does not list are not checked; an explicit null is", () => {
+    const actual = output({
+      actions: [action({ course: "CS2030", kind: "assignment", effort: "medium", due_local: "2026-11-06T23:59" })],
+    });
+    expect(runMatch([{ type: "update", task_ref: "T1", due_local: "2026-11-06T23:59" }], actual).pass).toBe(true);
+    expect(runMatch([{ type: "update", task_ref: "T1", course: null }], actual).pass).toBe(false);
+  });
+
   test("exact match passes", () => {
     const m = runMatch(
       [{ type: "update", task_ref: "T1", due_local: "2026-11-06T23:59" }],
