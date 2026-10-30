@@ -1,0 +1,25 @@
+{
+  "id": "extend-nxt-fri",
+  "description": "Professor extends an existing lab deadline to next Friday, must update not create",
+  "now": "2026-10-28T09:00:00+08:00",
+  "openTasks": [
+    {
+      "id": "task-1",
+      "title": "CS2030 Lab 4",
+      "course": "CS2030",
+      "kind": "assignment",
+      "due_at": "2026-10-30T15:59:00.000Z"
+    }
+  ],
+  "text": "prof say extend lab 4 to nxt fri liao",
+  "expected": {
+    "actions": [
+      {
+        "type": "update",
+        "task_ref": "T1",
+        "due_local": "2026-11-06T23:59"
+      }
+    ],
+    "needs_clarification": false
+  }
+}

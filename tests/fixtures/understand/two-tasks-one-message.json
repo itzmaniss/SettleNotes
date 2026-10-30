@@ -1,0 +1,24 @@
+{
+  "id": "two-tasks-one-message",
+  "description": "Two separate new tasks with different deadlines in one message",
+  "now": "2026-10-28T12:00:00+08:00",
+  "openTasks": [],
+  "text": "ok so CS2040 lab report due 6 Nov 5pm, and the MA2001 tutorial 5 is due tmr, both must do",
+  "expected": {
+    "actions": [
+      {
+        "type": "create",
+        "title": "lab report",
+        "course": "CS2040",
+        "due_local": "2026-11-06T17:00"
+      },
+      {
+        "type": "create",
+        "title": "tutorial",
+        "course": "MA2001",
+        "due_local": "2026-10-29T23:59"
+      }
+    ],
+    "needs_clarification": false
+  }
+}

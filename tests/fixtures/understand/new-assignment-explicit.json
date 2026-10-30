@@ -1,0 +1,26 @@
+{
+  "id": "new-assignment-explicit",
+  "description": "Brand new assignment with a full explicit date and time",
+  "now": "2026-10-28T09:00:00+08:00",
+  "openTasks": [
+    {
+      "id": "task-1",
+      "title": "CZ4045 Assignment 1",
+      "course": "CZ4045",
+      "kind": "assignment",
+      "due_at": "2026-10-26T15:59:00.000Z"
+    }
+  ],
+  "text": "new CZ4045 assignment 2 is out, submit by 12 Nov 2026 2pm",
+  "expected": {
+    "actions": [
+      {
+        "type": "create",
+        "title": "assignment",
+        "course": "CZ4045",
+        "due_local": "2026-11-12T14:00"
+      }
+    ],
+    "needs_clarification": false
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "id": "duplicate-phrased-differently",
+  "description": "Existing tutorial mentioned in different words must update T1, not create a duplicate",
+  "now": "2026-10-28T09:00:00+08:00",
+  "openTasks": [
+    {
+      "id": "task-1",
+      "title": "MA2001 Tutorial 5",
+      "course": "MA2001",
+      "kind": "other",
+      "due_at": "2026-10-29T15:59:00.000Z"
+    }
+  ],
+  "text": "oh no the ma2001 tutorial five thing got pushed to next tuesday",
+  "expected": {
+    "actions": [
+      {
+        "type": "update",
+        "task_ref": "T1",
+        "due_local": "2026-11-03T23:59"
+      }
+    ],
+    "needs_clarification": false
+  }
+}

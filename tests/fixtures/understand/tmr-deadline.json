@@ -1,0 +1,27 @@
+{
+  "id": "tmr-deadline",
+  "description": "New submission due 'tmr' with an explicit time",
+  "now": "2026-10-28T21:00:00+08:00",
+  "openTasks": [
+    {
+      "id": "task-1",
+      "title": "GEA1000 Quiz",
+      "course": "GEA1000",
+      "kind": "test",
+      "due_at": "2026-11-05T15:59:00.000Z"
+    }
+  ],
+  "text": "hey remember submit the CS2101 design doc tmr 5pm, after that cannot liao",
+  "expected": {
+    "actions": [
+      {
+        "type": "create",
+        "title": "design doc",
+        "course": "CS2101",
+        "kind": "assignment",
+        "due_local": "2026-10-29T17:00"
+      }
+    ],
+    "needs_clarification": false
+  }
+}

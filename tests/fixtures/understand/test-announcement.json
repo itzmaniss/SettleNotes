@@ -1,0 +1,27 @@
+{
+  "id": "test-announcement",
+  "description": "Test announced for next Tuesday 9am, no submission deadline involved",
+  "now": "2026-10-28T10:00:00+08:00",
+  "openTasks": [
+    {
+      "id": "task-1",
+      "title": "MA2001 Tutorial 6",
+      "course": "MA2001",
+      "kind": "other",
+      "due_at": null
+    }
+  ],
+  "text": "attention: MA2001 midterm test will be held next tue 9am at MPSH2",
+  "expected": {
+    "actions": [
+      {
+        "type": "create",
+        "title": "test",
+        "course": "MA2001",
+        "kind": "test",
+        "due_local": "2026-11-03T09:00"
+      }
+    ],
+    "needs_clarification": false
+  }
+}

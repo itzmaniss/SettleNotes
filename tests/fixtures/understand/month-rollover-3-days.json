@@ -1,0 +1,18 @@
+{
+  "id": "month-rollover-3-days",
+  "description": "Relative '3 days later' said on 30 Oct must land in November",
+  "now": "2026-10-30T20:00:00+08:00",
+  "openTasks": [],
+  "text": "GEA1000 quiz is due 3 days later, dun say i never tell you",
+  "expected": {
+    "actions": [
+      {
+        "type": "create",
+        "course": "GEA1000",
+        "kind": "test",
+        "due_local": "2026-11-02T23:59"
+      }
+    ],
+    "needs_clarification": false
+  }
+}

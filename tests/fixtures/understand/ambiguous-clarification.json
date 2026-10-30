@@ -1,0 +1,19 @@
+{
+  "id": "ambiguous-clarification",
+  "description": "Deadline changed but nobody says which task or to when, model must ask",
+  "now": "2026-10-28T09:00:00+08:00",
+  "openTasks": [
+    {
+      "id": "task-1",
+      "title": "CS2030 Lab 4",
+      "course": "CS2030",
+      "kind": "assignment",
+      "due_at": "2026-10-30T15:59:00.000Z"
+    }
+  ],
+  "text": "the deadline changed again, prof say go check the portal yourself",
+  "expected": {
+    "actions": [],
+    "needs_clarification": true
+  }
+}

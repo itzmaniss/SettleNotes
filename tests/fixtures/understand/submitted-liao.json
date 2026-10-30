@@ -1,0 +1,24 @@
+{
+  "id": "submitted-liao",
+  "description": "Student finished an open task, must complete by ref not create",
+  "now": "2026-10-30T19:00:00+08:00",
+  "openTasks": [
+    {
+      "id": "task-1",
+      "title": "CS2030 Lab 4",
+      "course": "CS2030",
+      "kind": "assignment",
+      "due_at": "2026-10-30T15:59:00.000Z"
+    }
+  ],
+  "text": "cs2030 lab 4 submitted liao, finally",
+  "expected": {
+    "actions": [
+      {
+        "type": "complete",
+        "task_ref": "T1"
+      }
+    ],
+    "needs_clarification": false
+  }
+}

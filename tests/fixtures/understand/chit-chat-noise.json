@@ -1,0 +1,19 @@
+{
+  "id": "chit-chat-noise",
+  "description": "Pure Singlish chit-chat with no coursework, must yield no actions",
+  "now": "2026-10-28T22:00:00+08:00",
+  "openTasks": [
+    {
+      "id": "task-1",
+      "title": "CS2030 Lab 4",
+      "course": "CS2030",
+      "kind": "assignment",
+      "due_at": "2026-10-30T15:59:00.000Z"
+    }
+  ],
+  "text": "eh wanna go supper at 11 later? i starving liao, jialat",
+  "expected": {
+    "actions": [],
+    "needs_clarification": false
+  }
+}

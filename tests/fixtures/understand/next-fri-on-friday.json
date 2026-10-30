@@ -1,0 +1,25 @@
+{
+  "id": "next-fri-on-friday",
+  "description": "Said on a Friday, 'next fri' means 7 days later, with an explicit 5pm time",
+  "now": "2026-10-30T09:00:00+08:00",
+  "openTasks": [
+    {
+      "id": "task-1",
+      "title": "EL1101E Reflection Essay",
+      "course": "EL1101E",
+      "kind": "reading",
+      "due_at": "2026-11-04T15:59:00.000Z"
+    }
+  ],
+  "text": "update: prof extended the reflection to next fri 5pm, cfm liao",
+  "expected": {
+    "actions": [
+      {
+        "type": "update",
+        "task_ref": "T1",
+        "due_local": "2026-11-06T17:00"
+      }
+    ],
+    "needs_clarification": false
+  }
+}

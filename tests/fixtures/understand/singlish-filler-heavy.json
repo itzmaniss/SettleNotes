@@ -1,0 +1,25 @@
+{
+  "id": "singlish-filler-heavy",
+  "description": "Heavy Singlish filler around a real deadline, 'this Wed' said on a Friday",
+  "now": "2026-10-30T23:00:00+08:00",
+  "openTasks": [
+    {
+      "id": "task-1",
+      "title": "SC2211 Lab Report",
+      "course": "SC2211",
+      "kind": "assignment",
+      "due_at": "2026-11-06T15:59:00.000Z"
+    }
+  ],
+  "text": "aiyo sian the proj report due this Wed 11pm can or not, i havent even start, jialat liao",
+  "expected": {
+    "actions": [
+      {
+        "type": "create",
+        "title": "proj",
+        "due_local": "2026-11-04T23:00"
+      }
+    ],
+    "needs_clarification": false
+  }
+}
