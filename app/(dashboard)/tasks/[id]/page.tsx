@@ -8,7 +8,7 @@ import {
   getTaskForUser,
   listTaskEvents,
 } from "@/lib/db/dashboard-queries";
-import { formatDueLine } from "@/lib/dashboard/format";
+import { formatDoneDueLine, formatDueLine } from "@/lib/dashboard/format";
 import { kindSticker, statusSticker } from "@/lib/dashboard/stickers";
 import { parseStarterContent } from "@/lib/starters/types";
 import { Sticker } from "@/components/settle";
@@ -56,7 +56,10 @@ export default async function TaskPage({ params }: TaskPageProps) {
       ? await signedUrl(starter.annotated_image_path, 3600)
       : null;
 
-  const due = formatDueLine(task.due_at, now);
+  const due =
+    task.status === "done"
+      ? { text: formatDoneDueLine(task.due_at), overdue: false }
+      : formatDueLine(task.due_at, now);
   const kind = kindSticker(task.kind);
   const status = statusSticker(task, events[0] ?? null, now);
 

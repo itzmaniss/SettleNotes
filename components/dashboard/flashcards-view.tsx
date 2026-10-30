@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Chunk, ChunkButton, FlipCard } from "@/components/settle";
 import type { Flashcard, FlashcardPracticeItem } from "@/lib/starters/types";
-import { MathText } from "./math-text";
+import { MixedMath } from "./mixed-math";
 import { PracticeReveals } from "./practice-reveals";
 
 type Verdict = "again" | "hard" | "got";
@@ -85,7 +85,7 @@ export function FlashcardsView({
           front={
             <span className="flex h-full flex-col items-center justify-center gap-2">
               <span className="text-center font-display text-lg font-bold leading-snug md:text-xl">
-                <MathText text={card.front} />
+                <MixedMath text={card.front} />
               </span>
               <span className="text-xs text-muted-foreground">tap to flip</span>
             </span>
@@ -93,7 +93,7 @@ export function FlashcardsView({
           back={
             <span className="flex h-full flex-col items-center justify-center gap-2 p-2">
               <span className="text-center text-base leading-relaxed md:text-lg">
-                <MathText text={card.back} />
+                <MixedMath text={card.back} />
               </span>
               {card.page != null && (
                 <span className="font-mono text-xs text-muted-foreground">slide {card.page}</span>

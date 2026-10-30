@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  formatDoneDueLine,
   formatDueLine,
   formatSgtDateShort,
   formatSgtDateTime,
@@ -86,6 +87,18 @@ describe("formatDueLine", () => {
       text: "Overdue by 1 day",
       overdue: true,
     });
+  });
+});
+
+describe("formatDoneDueLine", () => {
+  test("done with no or unparseable deadline reads just Done", () => {
+    expect(formatDoneDueLine(null)).toBe("Done");
+    expect(formatDoneDueLine("garbage")).toBe("Done");
+  });
+
+  test("done keeps the old date as history, never overdue wording", () => {
+    expect(formatDoneDueLine("2026-10-30T15:59:00.000Z")).toBe("Done, was due Fri 30 Oct");
+    expect(formatDoneDueLine("2026-11-03T01:00:00.000Z")).not.toMatch(/[Oo]verdue/);
   });
 });
 

@@ -56,6 +56,14 @@ export function formatSgtDateShort(iso: string): string {
   return formatSgtDateParts(date);
 }
 
+// Due line for a finished task: never overdue-flavoured, the work is closed.
+// 'Done' or 'Done, was due Fri 30 Oct' with the date as history, not pressure.
+export function formatDoneDueLine(iso: string | null): string {
+  const due = parseIso(iso);
+  if (due == null) return "Done";
+  return `Done, was due ${formatSgtDateParts(due)}`;
+}
+
 // Due line for a task row. Calendar-day overdue counting in Singapore time,
 // so a deadline that passed at 11:59pm reads 'Overdue by 1 day' at 12:01am.
 export function formatDueLine(iso: string | null, now: Date): DueLine {

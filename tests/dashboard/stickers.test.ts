@@ -74,4 +74,11 @@ describe("statusSticker", () => {
     expect(statusSticker(task({ due_at: null }), null, NOW)).toBeNull();
     expect(statusSticker(task({ due_at: "garbage" }), null, NOW)).toBeNull();
   });
+
+  test("a done task never gets a sticker, even past due", () => {
+    const late = task({ status: "done", due_at: "2026-11-01T00:00:00.000Z" });
+    const completed = event({ action: "completed", before: { status: "open" }, after: { status: "done" } });
+    expect(statusSticker(late, completed, NOW)).toBeNull();
+    expect(statusSticker(late, null, NOW)).toBeNull();
+  });
 });

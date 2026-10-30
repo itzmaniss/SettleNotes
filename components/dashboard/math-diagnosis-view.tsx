@@ -3,6 +3,7 @@ import { MATH_TOPIC_LABELS, type MathDiagnosis, type MathTopic } from "@/lib/sta
 import { cn } from "@/lib/utils";
 import { Eyebrow } from "./eyebrow";
 import { MathText } from "./math-text";
+import { MixedMath } from "./mixed-math";
 import { PracticeReveals } from "./practice-reveals";
 
 function topicLabel(topic: MathTopic): string {
@@ -30,7 +31,7 @@ export function MathDiagnosisView({
           <p className="font-semibold">This working checks out. Nice one.</p>
           <p className="mt-1 text-sm">
             <span className="font-semibold">Answer check: </span>
-            <MathText text={diagnosis.final_answer_check} />
+            <MixedMath text={diagnosis.final_answer_check} />
           </p>
         </Chunk>
       ) : (
@@ -87,7 +88,7 @@ export function MathDiagnosisView({
           {diagnosis.what_went_wrong != null && (
             <p className="text-sm leading-relaxed">
               <span className="font-semibold">What went wrong: </span>
-              {diagnosis.what_went_wrong}
+              <MixedMath text={diagnosis.what_went_wrong} />
             </p>
           )}
         </>
@@ -97,7 +98,9 @@ export function MathDiagnosisView({
         <Chunk className="p-5">
           <Eyebrow>Misconception</Eyebrow>
           <p className="mt-1 font-display font-bold">{topicLabel(diagnosis.misconception.topic)}</p>
-          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{diagnosis.misconception.detail}</p>
+          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+            <MixedMath text={diagnosis.misconception.detail} />
+          </p>
         </Chunk>
       )}
 
@@ -105,7 +108,14 @@ export function MathDiagnosisView({
         <Chunk tone="pop" className="p-5">
           <Eyebrow>Next step</Eyebrow>
           <p className="mt-1 text-sm leading-relaxed">
-            <MathText text={diagnosis.correct_next_step} />
+            {/* New output carries $-wrapped maths; older rows are raw
+                LaTeX-or-text by the original contract, so keep MathText for
+                anything with no dollars in it. */}
+            {diagnosis.correct_next_step.includes("$") ? (
+              <MixedMath text={diagnosis.correct_next_step} />
+            ) : (
+              <MathText text={diagnosis.correct_next_step} />
+            )}
           </p>
         </Chunk>
       )}
@@ -113,7 +123,7 @@ export function MathDiagnosisView({
       {!diagnosis.is_correct && (
         <p className="text-sm text-muted-foreground">
           <span className="font-semibold">Answer check: </span>
-          <MathText text={diagnosis.final_answer_check} />
+          <MixedMath text={diagnosis.final_answer_check} />
         </p>
       )}
 

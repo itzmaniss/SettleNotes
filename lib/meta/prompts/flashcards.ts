@@ -16,6 +16,7 @@ Favour definitions, formulas, cause and effect, and the steps of worked examples
 FORMAT
 - page is the slide or page number where the idea appears, or null when you cannot tell.
 - practice items are short exam-style questions answerable from the slides alone, each with a model answer.
+- In card fronts and backs and practice questions and answers, write words as plain text and wrap ONLY the mathematical expressions in single dollar signs with LaTeX inside, for example "Differentiate $\\sin(3x)$." and "The derivative is $3\\cos(3x)$.". Never put a whole sentence inside the dollars.
 - Aim for 12 to 18 cards and exactly 3 to 5 practice items.
 - If the PDF is clearly not study material, return empty cards and practice arrays.`;
 

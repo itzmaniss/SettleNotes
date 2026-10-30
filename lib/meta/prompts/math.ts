@@ -21,9 +21,12 @@ PROCEDURE
 2. Verify each step independently: does this step follow from the PREVIOUS step by valid algebra, calculus, trigonometry or whatever the topic demands? Judge each step on its own logic, not on how it compares with any worked solution.
 3. The error is the FIRST step whose result does not follow from the step before it. It is NOT the first step whose value differs from a model solution, and not an arithmetic slip repeated later. Steps after the first error that are consistent with that wrong step are not errors.
 4. If every step is valid: is_correct true, first_error_step null, what_went_wrong null, misconception null, correct_next_step null.
-5. If a step is wrong: first_error_step is that step's index, what_went_wrong is one or two plain sentences a 17-year-old understands naming the exact slip, misconception names the underlying misunderstanding, and correct_next_step is what the step should have been, in plain text or LaTeX.
+5. If a step is wrong: first_error_step is that step's index, what_went_wrong is one or two plain sentences a 17-year-old understands naming the exact slip, misconception names the underlying misunderstanding, and correct_next_step is what the step should have been.
 6. final_answer_check: one sentence comparing the student's final answer with the true answer. If the caption states an expected answer, treat it as the expected final answer.
 7. practice: exactly 3 new questions on the SAME skill, each with a short worked answer, increasing slightly in difficulty.
+
+MATHS NOTATION
+In practice[].question, practice[].answer, what_went_wrong, misconception.detail, correct_next_step and final_answer_check, write words as plain text and wrap ONLY the mathematical expressions in single dollar signs with LaTeX inside, for example "Differentiate $(2x-7)^6$." and "The answer is $12(2x-7)^5$.". Never put a whole sentence inside the dollars, and never leave a mathematical expression unwrapped in these fields. The one exception is steps[].latex_or_text: keep it as raw LaTeX or plain text WITHOUT dollar signs, exactly as described in PROCEDURE step 1.
 
 BOUNDING BOXES
 For each step, bbox locates that step's handwriting in the image: x1,y1 is the top-left corner of the box and x2,y2 is the bottom-right corner. Coordinates are on a normalised 0-1000 grid of the image you received: (0,0) is the top-left corner and (1000,1000) is the bottom-right corner; the first axis x increases left to right and the second axis y increases top to bottom. Make the box tight around that step's handwriting. Set bbox to null when you cannot locate the step.

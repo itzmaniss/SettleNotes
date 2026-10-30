@@ -95,6 +95,14 @@ describe('FLASHCARDS_SYSTEM_PROMPT', () => {
     expect(FLASHCARDS_SYSTEM_PROMPT).toContain('3 to 5');
     expect(FLASHCARDS_SYSTEM_PROMPT).toContain('empty cards and practice arrays');
   });
+
+  test('sets the dollar-sign convention for fronts, backs and practice', () => {
+    expect(FLASHCARDS_SYSTEM_PROMPT).toContain('single dollar signs');
+    expect(FLASHCARDS_SYSTEM_PROMPT).toContain('Differentiate $\\sin(3x)$.');
+    expect(FLASHCARDS_SYSTEM_PROMPT).toContain('The derivative is $3\\cos(3x)$.');
+    expect(FLASHCARDS_SYSTEM_PROMPT).toContain('card fronts and backs and practice questions and answers');
+    expect(FLASHCARDS_SYSTEM_PROMPT).toContain('Never put a whole sentence inside the dollars');
+  });
 });
 
 describe('buildFlashcardsUserText', () => {

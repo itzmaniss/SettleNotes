@@ -24,14 +24,17 @@ export function kindSticker(kind: TaskKind): StickerSpec | null {
   }
 }
 
-// Status sticker: 'moved' when the latest event was an update that changed the
-// deadline (the reconciler's Singlish evidence is the whole point), else
-// 'overdue'. Moved wins: a deadline that just moved is the news, even when late.
+// Status sticker for an OPEN task: 'moved' when the latest event was an update
+// that changed the deadline (the reconciler's Singlish evidence is the whole
+// point), else 'overdue'. Moved wins: a deadline that just moved is the news,
+// even when late. A done task is finished, so it never gets one, whatever the
+// calendar says.
 export function statusSticker(
-  task: Pick<TaskRow, "due_at">,
+  task: Pick<TaskRow, "due_at" | "status">,
   lastEvent: Pick<TaskEventRow, "action" | "before" | "after"> | null,
   now: Date,
 ): StickerSpec | null {
+  if (task.status === "done") return null;
   if (lastEvent != null && lastEvent.action === "updated" && eventChangedDueAt(lastEvent.before, lastEvent.after)) {
     return { label: "moved", tone: "pop" };
   }

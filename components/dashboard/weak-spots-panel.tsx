@@ -17,9 +17,17 @@ function WeakSpotRowItem({ spot }: { spot: WeakSpotRow }) {
   const review = spot.next_review_at != null ? formatSgtDateShort(spot.next_review_at) : "";
   return (
     <li>
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="font-medium">{topicLabel(spot.topic)}</span>
-        <span className={cn("shrink-0 font-mono text-xs", recurring && "text-destructive")}>
+      {/* Narrow screens: the topic gets its own full-width line and the meta
+          counts sit beneath it (smaller, allowed to wrap); sm and up keep the
+          single row. Recurring is named in words, not colour alone. */}
+      <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
+        <span className="font-medium sm:whitespace-nowrap">{topicLabel(spot.topic)}</span>
+        <span
+          className={cn(
+            "font-mono text-[11px] leading-snug sm:shrink-0 sm:text-xs",
+            recurring && "text-destructive",
+          )}
+        >
           {spot.occurrences}×{recurring ? " · recurring" : ""}
           {review !== "" ? ` · review ${review}` : ""}
         </span>

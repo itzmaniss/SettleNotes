@@ -60,12 +60,27 @@ describe("TaskRowCard", () => {
     expect(html).toContain("text-destructive");
   });
 
-  test("a done task renders ticked and dimmed", () => {
+  test("a done task is muted with a struck-through title and never reads overdue", () => {
     const html = render(
-      <TaskRowCard task={task({ status: "done" })} lastEvent={null} now={NOW} />,
+      <TaskRowCard
+        task={task({ status: "done", due_at: "2026-10-30T15:59:00.000Z" })}
+        lastEvent={null}
+        now={NOW}
+      />,
     );
     expect(html).toContain('aria-checked="true"');
     expect(html).toContain("opacity-75");
+    expect(html).toContain("line-through");
+    expect(html).toContain("Done, was due Fri 30 Oct");
+    expect(html).not.toContain("Overdue");
+    expect(html).not.toContain(">overdue<");
+    expect(html).not.toContain("text-destructive");
+  });
+
+  test("a done task without a deadline reads just Done", () => {
+    const html = render(<TaskRowCard task={task({ status: "done" })} lastEvent={null} now={NOW} />);
+    expect(html).toContain("Done");
+    expect(html).not.toContain("No deadline");
   });
 });
 
@@ -156,6 +171,15 @@ describe("WeakSpotsPanel", () => {
     const html = render(<WeakSpotsPanel spots={[weakSpot({ topic: "mystery_topic", occurrences: 1 })]} />);
     expect(html).toContain("mystery_topic");
   });
+
+  test("narrow screens stack the topic above the meta line; sm and up keep one row", () => {
+    const html = render(<WeakSpotsPanel spots={[weakSpot({ occurrences: 3 })]} />);
+    expect(html).toContain("flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3");
+    expect(html).toContain("font-medium sm:whitespace-nowrap");
+    expect(html).toContain("text-[11px] leading-snug sm:shrink-0 sm:text-xs");
+    // recurring is named in words, not colour alone
+    expect(html).toContain("recurring");
+  });
 });
 
 describe("ChecklistView", () => {
@@ -212,6 +236,24 @@ describe("FlashcardsView", () => {
   test("empty deck shows a calm note", () => {
     expect(render(<FlashcardsView cards={[]} practice={[]} />)).toContain("no cards");
   });
+
+  test("card faces render sentences with dollar maths, spaces intact", () => {
+    const html = render(
+      <FlashcardsView
+        cards={[
+          {
+            front: "State the rule for $\\frac{d}{dx}f(g(x))$.",
+            back: "Differentiate the outer, then multiply by $g'(x)$.",
+            page: 3,
+          },
+        ]}
+        practice={[]}
+      />,
+    );
+    expect(html).toContain("State the rule for ");
+    expect(html).toContain("Differentiate the outer, then multiply by ");
+    expect(html).toContain("katex");
+  });
 });
 
 describe("PracticeReveals", () => {
@@ -223,6 +265,23 @@ describe("PracticeReveals", () => {
     expect(html).toContain("<summary");
     expect(html).toContain("Q1");
     expect(html).toContain("A1");
+  });
+
+  test("a plain sentence keeps its spaces and is not typeset as math", () => {
+    const html = render(
+      <PracticeReveals items={[{ question: "Find the critical points of x^3 - 3x.", answer: "x = 0, 3" }]} />,
+    );
+    expect(html).toContain("Find the critical points of x^3 - 3x.");
+    expect(html).not.toContain("katex");
+  });
+
+  test("dollar-wrapped maths is typeset between intact text runs", () => {
+    const html = render(
+      <PracticeReveals items={[{ question: "Differentiate $(2x-7)^6$.", answer: "The answer is $12(2x-7)^5$." }]} />,
+    );
+    expect(html).toContain("Differentiate ");
+    expect(html).toContain("katex");
+    expect(html).toContain("The answer is ");
   });
 });
 
@@ -260,6 +319,22 @@ describe("MathDiagnosisView", () => {
     const step2 = html.indexOf("2(3x + 1)");
     expect(html.indexOf("slipped here")).toBeGreaterThan(step1);
     expect(html.indexOf("slipped here")).toBeGreaterThan(step2 - 60);
+  });
+
+  test("sentence fields go through MixedMath while steps stay latex-or-text", () => {
+    const dollar: MathDiagnosis = {
+      ...DIAGNOSIS,
+      what_went_wrong: "You dropped the $3$ from $(3x + 1)^2$.",
+      misconception: { topic: "differentiation_chain_rule", detail: "The inner derivative $3$ went missing." },
+      correct_next_step: "Write $f'(x) = 2(3x + 1) \\cdot 3$.",
+      final_answer_check: "The true derivative is $6(3x + 1)$.",
+    };
+    const html = render(<MathDiagnosisView diagnosis={dollar} imageUrl={null} imageAlt="" />);
+    expect(html).toContain("You dropped the ");
+    expect(html).toContain("The inner derivative ");
+    expect(html).toContain("Write ");
+    expect(html).toContain("The true derivative is ");
+    expect(html).toContain("katex");
   });
 
   test("missing image degrades to a calm note", () => {

@@ -50,4 +50,31 @@ describe("groupForDashboard", () => {
   test("no tasks gives no sections", () => {
     expect(groupForDashboard([], NOW)).toEqual([]);
   });
+
+  test("done tasks leave the buckets and land in a final Done section, newest first", () => {
+    const overdue = task({ id: "overdue", due_at: "2026-11-03T01:00:00.000Z" });
+    const doneRecent = task({
+      id: "done-recent",
+      status: "done",
+      due_at: "2026-11-01T01:00:00.000Z",
+      updated_at: "2026-11-04T00:00:00.000Z",
+    });
+    const doneOlder = task({
+      id: "done-older",
+      status: "done",
+      due_at: "2026-11-02T01:00:00.000Z",
+      updated_at: "2026-11-03T00:00:00.000Z",
+    });
+    const sections = groupForDashboard([doneOlder, overdue, doneRecent], NOW);
+    expect(sections.map((section) => section.bucket)).toEqual(["overdue", "done"]);
+    expect(sections[0].tasks.map((t) => t.id)).toEqual(["overdue"]);
+    expect(sections[1].label).toBe("Done");
+    expect(sections[1].tasks.map((t) => t.id)).toEqual(["done-recent", "done-older"]);
+  });
+
+  test("a done task due in the future never lands in Today or This week", () => {
+    const done = task({ id: "done", status: "done", due_at: "2026-11-05T10:00:00.000Z" });
+    const sections = groupForDashboard([done], NOW);
+    expect(sections.map((section) => section.bucket)).toEqual(["done"]);
+  });
 });

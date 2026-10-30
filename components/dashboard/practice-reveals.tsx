@@ -1,8 +1,9 @@
-import { MathText } from "./math-text";
+import { MixedMath } from "./mixed-math";
 import { Eyebrow } from "./eyebrow";
 
 // Practice questions with reveal-answer disclosures. Native <details>, so it
-// works with JavaScript off and the summary is a 44px tap target.
+// works with JavaScript off and the summary is a 44px tap target. Copy is
+// sentence text with $-wrapped maths, never raw LaTeX.
 export function PracticeReveals({
   items,
   heading = "Practice",
@@ -22,10 +23,10 @@ export function PracticeReveals({
                 <span aria-hidden="true" className="shrink-0 font-mono text-xs text-muted-foreground">
                   {index + 1}.
                 </span>
-                <MathText text={item.question} />
+                <MixedMath text={item.question} />
               </summary>
               <div className="border-t-2 border-border px-4 py-3 text-sm leading-relaxed">
-                <MathText text={item.answer} />
+                <MixedMath text={item.answer} />
               </div>
             </details>
           </li>

@@ -158,6 +158,25 @@ describe('MATH_SYSTEM_PROMPT', () => {
     expect(MATH_SYSTEM_PROMPT).toContain('Could not read the working.');
     expect(MATH_SYSTEM_PROMPT).toContain('exactly 3 new questions');
   });
+
+  test('sets the dollar-sign convention for sentence fields, raw latex for steps', () => {
+    expect(MATH_SYSTEM_PROMPT).toContain('single dollar signs');
+    expect(MATH_SYSTEM_PROMPT).toContain('Differentiate $(2x-7)^6$.');
+    expect(MATH_SYSTEM_PROMPT).toContain('The answer is $12(2x-7)^5$.');
+    for (const field of [
+      'practice[].question',
+      'practice[].answer',
+      'what_went_wrong',
+      'misconception.detail',
+      'correct_next_step',
+      'final_answer_check',
+    ]) {
+      expect(MATH_SYSTEM_PROMPT).toContain(field);
+    }
+    expect(MATH_SYSTEM_PROMPT).toContain('WITHOUT dollar signs');
+    expect(MATH_SYSTEM_PROMPT).toMatch(/steps\[\]\.latex_or_text[\s\S]*WITHOUT dollar signs/);
+    expect(MATH_SYSTEM_PROMPT).toContain('Never put a whole sentence inside the dollars');
+  });
 });
 
 describe('buildMathUserText', () => {
