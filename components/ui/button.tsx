@@ -17,6 +17,15 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
+        chunk:
+          "rounded-full border-2 border-border font-semibold shadow-[3px_3px_0_0_var(--foreground)] active:translate-x-[3px] active:translate-y-[3px] active:not-aria-[haspopup]:translate-y-[3px] active:shadow-none",
+      },
+      // Empty strings on purpose: `tone` only paints anything through the
+      // compound variants below, so it stays a no-op on non-chunk variants.
+      tone: {
+        accent: "",
+        ink: "",
+        card: "",
       },
       size: {
         default:
@@ -32,26 +41,38 @@ const buttonVariants = cva(
         "icon-lg": "size-9",
       },
     },
+    compoundVariants: [
+      { variant: "chunk", tone: "accent", class: "bg-accent text-accent-foreground" },
+      { variant: "chunk", tone: "ink", class: "bg-foreground text-background" },
+      { variant: "chunk", tone: "card", class: "bg-card text-foreground" },
+      // 44px minimum tap height for the chunk pill at its default size.
+      { variant: "chunk", size: "default", class: "h-11 px-5" },
+    ],
     defaultVariants: {
       variant: "default",
+      tone: "accent",
       size: "default",
     },
   }
 )
 
+type ButtonProps = ButtonPrimitive.Props & VariantProps<typeof buttonVariants>
+
 function Button({
   className,
   variant = "default",
+  tone,
   size = "default",
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+}: ButtonProps) {
   return (
     <ButtonPrimitive
       data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={cn(buttonVariants({ variant, tone, size, className }))}
       {...props}
     />
   )
 }
 
 export { Button, buttonVariants }
+export type { ButtonProps }
