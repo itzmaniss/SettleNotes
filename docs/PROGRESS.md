@@ -2,6 +2,24 @@
 
 Newest entry on top. Each entry: date, card(s), commit(s), gate result, live spend, decisions, next steps.
 
+## 2026-10-31 - Day 2: T08-T12 built, starters wired into the bot
+- Commits (local): `2a62a9e` T08 starter schemas + checklist + dispatcher; `b96cf18` T11 dashboard magic-link auth; `93cc0de` T09 flashcards; `9504520` T10 math diagnosis + annotated photo; `f0db6dc` T12 dashboard UI (Direction C); `5742ae4` T12b polish; `b834123` T08w starter wiring. Gate at the end: typecheck, lint, 693 tests, build all green. Pushed to `origin/main` only up to `4cf1431`; everything after is local. Ask before the next push.
+- Subagent stall: the first attempt at T09, T10 and T12 in parallel hung 12 to 13 minutes waiting for model replies (all three at once) and was interrupted; nothing was written. A lone T09 canary then ran normally, then T10 + T12 in parallel worked. Likely a provider hiccup, not confirmed. If it recurs: send one small card first, and consider the delegation model.
+- Decisions:
+  - Bbox is an object `{x1,y1,x2,y2}` on the 0-1000 grid (strict mode does not document tuples or minItems). Flashcard limits (10-20 cards, 3-5 practice) are enforced in code, not in the wire schema.
+  - Login link sent with link previews disabled so Telegram's fetcher cannot burn the single-use URL. Session cookie: jose HS256, HttpOnly, SameSite=Lax, `Secure` only when `APP_BASE_URL` is https. Protected prefixes `/dashboard`, `/tasks`, `/weak-spots` (middleware, fails closed).
+  - Starters: checklist attaches to the first created (else first updated) task from an assignment brief PDF. Slides PDF with no resulting task gets a fallback "Revise: <filename>" reading task so flashcards have a home. Math photo: wrong working creates a `math_practice` task "Math check: <topic>" with a `math_diagnosis` starter and the annotated JPEG; correct or unreadable working writes nothing. Starter failures never lose the task (reply gets one plain sentence); a math model failure fails the upload with no task written.
+  - Maths in stored text uses `$...$` for inline LaTeX (prompts say so; `MixedMath` renders it); `steps[].latex_or_text` stays raw LaTeX.
+  - Manager small fixes: task page and actions require real UUIDs (bad id is a 404, not an error page); `tests/starters/index.test.ts` updated for the flashcards registration.
+- Manager visual check with seeded data (labelled user "ZZ Demo Seed", deleted afterwards, DB and storage verified empty): real magic-link login works, checklist tick persists, no horizontal overflow at 390px, T12b defects fixed (done tasks, spaced plain text, weak-spot wrapping).
+- Follow-ups: the "This week" heading sits over the Overdue and Later groups (label only); `/weak-spots` 404s until T13 (nav links to it); no Later action; the `/dashboard` empty-state copy assumes the bot link exists; Lighthouse not run; a `next-server` for this repo has been running on port 3000 for hours and was not started by the manager (left alone).
+- Not built yet: T13 weak-spot loop (the `onDiagnosisRecorded` hook is in place), T14 voice, T15 hardening, T19 billing seams (`plans.ts` exists), T16 deploy, T17 demo kit. Day 1 live check and the Day 2 live evals (`eval math` on real photos, checklist and flashcards on real PDFs) still need the user's fixtures; no live spend since the 13-fixture understand eval.
+
+### Next
+1. Day 1 exit check with the user's screenshots via `bun run bot:poll`.
+2. Day 2 live evals once real fixtures exist (math photos with labelled wrong step, one brief PDF, one slides PDF); wire `eval math|checklist|flashcards` runners into `scripts/eval.ts`.
+3. T13 weak-spot loop, T19 billing seams, then T14, T15, T17; T16 deploy needs the user's go-ahead.
+
 ## 2026-10-31 - Remote set up, first push
 - `origin` = `git@github.com:itzmaniss/SettleNotes.git` (SSH; HTTPS has no stored credentials on this Mac, the `~/.ssh/github` key authenticates as `itzmaniss`). The repo is PUBLIC and was empty. Pushed `main` up to `4cf1431` on the user's explicit request after a secret scan of the full history (only fake test values and doc examples matched).
 - Commits carry the user's git identity (name and Outlook email from `git config`), so that email is now public in the repo history.
