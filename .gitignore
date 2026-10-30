@@ -1,0 +1,16 @@
+node_modules/
+.next/
+out/
+.vercel/
+.env
+.env*.local
+*.log
+.DS_Store
+tests/fixtures/real/
+.claude/
+.agents/
+plan.md
+report.md
+*.tsbuildinfo
+/coverage
+next-env.d.ts

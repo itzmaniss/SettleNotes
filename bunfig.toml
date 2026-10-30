@@ -1,0 +1,6 @@
+# bun 1.4.x reads the top-level preload for `bun run` and the [test] one for
+# `bun test`; both point at the same setup that mocks out "server-only".
+preload = ["./tests/setup.ts"]
+
+[test]
+preload = ["./tests/setup.ts"]
