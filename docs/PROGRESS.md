@@ -2,6 +2,25 @@
 
 Newest entry on top. Each entry: date, card(s), commit(s), gate result, live spend, decisions, next steps.
 
+## 2026-10-30 - Migration applied + group P2 (T06a, T06b, T07)
+- Migration `0001_init.sql` applied (single transaction) to the Supabase project in `SUPABASE_DB_URL`: it was an empty Postgres 17 with no public tables. Result: 9 tables, RLS on for all, 0 policies. Applied with explicit user go-ahead. No Telegram heads-up was sent (no Telegram tool in the manager session).
+- Storage bucket `uploads` does NOT exist yet (T00-H item, not created by the manager). Needed for the Day 1 live check.
+- Gate after P2: typecheck, lint, 250 tests, build all green. Eval dry run (`bun run eval -- understand`) lists 13 fixtures, est. $0.13, no keys needed.
+- Commits (local, not pushed): T06a understand prompt/schema/dates/13 fixtures, T06b reconcile + priority (51 tests), T07 eval harness (40 tests). Hashes in `git log`.
+- Decisions:
+  - `ReconcileAction` (T06b) takes `taskId` and `dueAt` already resolved by the caller. T06c must map `task_ref` via `refToTaskId` (unknown ref -> `taskId: null`) and convert `due_local` with `dueLocalToUtc` before calling `planReconcile`.
+  - `planReconcile` returns ops only; the DB executor (`executeOps`) is T06c's job. Op kinds: `create`, `update`, `complete`, `clarify`.
+  - Complete with an unknown id is dropped, never downgraded to a create.
+  - `priority.ts` also exports `bucketOf` / `groupByBucket` (overdue/today/this_week/later, SGT, Monday-start weeks) for T12.
+  - `understand()` clamps confidence to 0..1 in code (strict mode has no min/max). It does not convert `due_local`.
+  - Eval harness: dry run by default, `--live` needed to spend, `--max-usd` default 2; live runner uses in-memory cost tracking (no DB). math/checklist/flashcards runners are null until T08-T10; the manager wires them into `scripts/eval.ts`.
+- Live spend so far: about $0.0005.
+
+### Next
+1. User creates private bucket `uploads` (or asks the manager to).
+2. T06c ingest wiring (owns `lib/pipeline/ingest.ts`, `lib/telegram/handlers.ts`, `lib/telegram/replies.ts`, may edit `lib/telegram/bot.ts`; also needs an app-level Meta client wiring file, e.g. `lib/meta/index.ts`, plus `executeOps`).
+3. Live: `bun run eval -- understand --live` (about $0.15), then the poll-mode bot against the dev DB.
+
 ## 2026-10-30 - Day 1: Meta smoke call, T01, group P1 (T02-T05)
 - Session start: all `.env` keys present (not printed). Meta smoke call OK: `muse-spark-1.3`, HTTP 200, 119 tokens (about $0.0005). Key works from Singapore.
 - Gate after P1: `typecheck`, `lint`, `bun test` (120 pass), `build` all green.
