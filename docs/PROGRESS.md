@@ -2,6 +2,12 @@
 
 Newest entry on top. Each entry: date, card(s), commit(s), gate result, live spend, decisions, next steps.
 
+## 2026-10-31 - T15a hardening, 0002 applied, first big push
+- Done on the user's explicit "go": `0002_billing.sql` applied to Supabase in one transaction (12 public tables, RLS on all, 0 policies, `anon`/`authenticated` cannot execute `claim_usage`; a limit-0 rpc call through the API returned null and wrote nothing). `BILLING_ENABLED` still false. `main` pushed to origin (`4cf1431..3f55c12`, 17 commits) after a full-history scan for the real `.env` values and key-shaped strings (zero hits). Tags `day1-final`/`day2-final` NOT pushed. No Telegram heads-up was sent (no Telegram tool in the session).
+- T15a: per-user rate limit (8 ingesting messages per 60 s, counted from `uploads`, so it works serverless; fails open), `/tasks` (top 5, same ranking as the dashboard) and `/done <n>` (resolves n against the same cut, same write shape as a chat completion, scoped by user id), `pdfUnreadableReply`, and `aiBusyReply` so a Meta timeout or outage no longer tells the student to send a clearer photo. Tests in `tests/hardening/` for every error path plus a dash and engineer-jargon scan over all fixed replies. Gate: typecheck, lint, 968 tests, build green.
+- Process note: the GLM subagent died at ~80% with `HTTP 429: Weekly/Monthly Limit Exhausted` (resets 17:26 today). Partial output was reviewed and was good; with the user's one-off approval the manager fixed two bad test expectations (a hard-coded wrong date; the known-commands registry test), added the error-path/tone tests and `aiBusyReply`, and committed. All other work stays delegated.
+- Deferred, needs a decision: T15b, the low-confidence "did you mean?" inline buttons (needs a `pending_actions` table = migration `0003`, or a limited stateless version for moves and ticks only). T16 deploy needs a host choice.
+
 ## 2026-10-31 - T14 voice notes, T17 demo kit
 - Commits (local): `b2db3bc` T14; `be8696a` T17. Gate: typecheck, lint, 893 tests, build green.
 - T14: OGG to WAV 16 kHz mono via ffmpeg-static (real conversion test on a generated Opus tone), `muse-voice-transcribe-1.0` client with retries, budget guard and per-call cost logging, voice handler (notes over 3 minutes refused before download). Reply starts with `I heard: "..."`, then the normal reply; the transcript goes through the same Understand flow, so Singlish deadline moves work from voice. Not gated by the usage ledger.
