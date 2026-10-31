@@ -58,6 +58,12 @@ const buttonVariants = cva(
 
 type ButtonProps = ButtonPrimitive.Props & VariantProps<typeof buttonVariants>
 
+// Base UI assumes a native <button> unless told otherwise. When a caller
+// swaps in a link through `render`, the default has to flip or it warns.
+function resolveNativeButton(props: Pick<ButtonPrimitive.Props, "nativeButton" | "render">): boolean {
+  return props.nativeButton ?? props.render === undefined
+}
+
 function Button({
   className,
   variant = "default",
@@ -70,9 +76,10 @@ function Button({
       data-slot="button"
       className={cn(buttonVariants({ variant, tone, size, className }))}
       {...props}
+      nativeButton={resolveNativeButton(props)}
     />
   )
 }
 
-export { Button, buttonVariants }
+export { Button, buttonVariants, resolveNativeButton }
 export type { ButtonProps }
