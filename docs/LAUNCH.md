@@ -24,6 +24,19 @@ bun run scripts/smoke.ts https://staging.example.com
 bun run scripts/stats.ts --days 7
 ```
 
+### Consent and legal
+
+Settle only creates an account after a person accepts the Terms and the Privacy Policy, in the bot (the agree button) and on the web (the /accept page). These steps gate the launch:
+
+- [ ] **[User]** The legal pages exist at `/terms`, `/privacy` and `/refund` and return 200. They are written separately from this codebase; the consent buttons in the bot and on `/accept` link to them, so the gate must not go live before they exist.
+- [ ] **[User]** Singapore counsel has reviewed the legal pages and the consent wording in `lib/legal/consent-copy.ts`, especially whether wording about young readers, an age confirmation or liability language is needed. That call is counsel's, not this runbook's.
+- [ ] **[User]** Whenever the Terms or the Privacy Policy texts change, bump `TERMS_VERSION` in `lib/legal/version.ts` to the effective date, so everyone is asked to accept again.
+- [ ] **[Manager]** Apply `supabase/migrations/0004_terms_acceptance.sql` before deploying this code, with the user's go. It adds the two nullable acceptance columns; without it every login fails closed.
+- [ ] **[Manager]** After the legal pages ship, re-run the smoke script: the three `legal page` lines must read PASS, not WARN.
+- [ ] **[User]** Keep `STRIPE_PRICE_PRO_YEARLY_PAYNOW` unset until the Terms and the refund text cover a one time yearly PayNow payment. Leaving it blank hides the PayNow button; filling it earlier would sell a plan the legal text does not describe yet.
+- [ ] **[User]** In the Stripe dashboard, configure the customer portal with cancellation enabled (test mode first, then live) before testing the Manage subscription button.
+
+
 ## 2. Infrastructure
 
 Follow `docs/DEPLOY.md` sections "What you need", "Environment variables", "The env file", "DNS, firewall, first deploy". Summary of what must exist, in this order:

@@ -48,11 +48,33 @@ async function request(fetcher: SmokeFetcher, base: string, path: string, method
 const PROTECTED_PATHS = ["/dashboard", "/billing", "/tasks", "/weak-spots"] as const;
 const LEGAL_PATHS = ["/terms", "/privacy", "/refund"] as const;
 
+// Detail suffix for a 500: behind the proxy a missing env var looks like a
+// broken route, so the message points at configuration first.
+const CONFIG_HINT = "is the server configured?";
+
+function detailFor(res: SmokeResponse, detail: string): string {
+  return res.status === 500 ? `${detail}; ${CONFIG_HINT}` : detail;
+}
+
+// A redirect Location is safe when it is a relative path or shares the base
+// URL's origin. Anything else means a redirect was built from request.url or
+// the Host header behind the proxy, which sends people to a dead address.
+function redirectStaysOnBaseOrigin(location: string, base: string): boolean {
+  if (location.startsWith("/")) return true;
+  try {
+    return new URL(location).origin === new URL(base).origin;
+  } catch {
+    return false;
+  }
+}
+
 // Runs every check against the fake or real fetcher. Never throws: a network
 // style error becomes a FAIL for that check.
 export async function runSmokeChecks(fetcher: SmokeFetcher, rawBase: string): Promise<SmokeResult[]> {
   const base = normalizeBaseUrl(rawBase);
   const results: SmokeResult[] = [];
+  // Every redirect Location seen in the checks above, for the origin check.
+  const redirectLocations: string[] = [];
 
   async function check(name: string, run: () => Promise<SmokeResult>): Promise<void> {
     try {
@@ -80,7 +102,7 @@ export async function runSmokeChecks(fetcher: SmokeFetcher, rawBase: string): Pr
     return {
       name: "health endpoint",
       status: ok ? "pass" : "fail",
-      detail: `GET /api/health returned ${res.status}`,
+      detail: detailFor(res, `GET /api/health returned ${res.status}`),
     };
   });
 
@@ -90,7 +112,10 @@ export async function runSmokeChecks(fetcher: SmokeFetcher, rawBase: string): Pr
     return {
       name: "landing page",
       status: res.status === 200 && mentionsSettle ? "pass" : "fail",
-      detail: `GET / returned ${res.status}${mentionsSettle ? "" : " and the title does not mention Settle"}`,
+      detail: detailFor(
+        res,
+        `GET / returned ${res.status}${mentionsSettle ? "" : " and the title does not mention Settle"}`,
+      ),
     };
   });
 
@@ -99,7 +124,7 @@ export async function runSmokeChecks(fetcher: SmokeFetcher, rawBase: string): Pr
     return {
       name: "login page",
       status: res.status === 200 ? "pass" : "fail",
-      detail: `GET /login returned ${res.status}`,
+      detail: detailFor(res, `GET /login returned ${res.status}`),
     };
   });
 
@@ -107,14 +132,17 @@ export async function runSmokeChecks(fetcher: SmokeFetcher, rawBase: string): Pr
     await check(`session gate ${path}`, async () => {
       const res = await request(fetcher, base, path);
       const location = res.headers.get("location") ?? "";
+      if (location) redirectLocations.push(location);
       const redirectedAway = (res.status === 307 || res.status === 303) && location.includes("/auth/expired");
       return {
         name: `session gate ${path}`,
         status: redirectedAway ? "pass" : "fail",
-        detail:
+        detail: detailFor(
+          res,
           res.status === 200
             ? `GET ${path} answered 200 without a session, the gate is missing`
             : `GET ${path} returned ${res.status} to ${location || "no location"}`,
+        ),
       };
     });
   }
@@ -124,7 +152,10 @@ export async function runSmokeChecks(fetcher: SmokeFetcher, rawBase: string): Pr
     return {
       name: "telegram route exists",
       status: res.status === 405 ? "pass" : "fail",
-      detail: `GET /api/telegram returned ${res.status} (405 expected for the wrong verb)`,
+      detail: detailFor(
+        res,
+        `GET /api/telegram returned ${res.status} (405 expected for the wrong verb)`,
+      ),
     };
   });
 
@@ -133,7 +164,10 @@ export async function runSmokeChecks(fetcher: SmokeFetcher, rawBase: string): Pr
     return {
       name: "telegram webhook refuses unsigned calls",
       status: res.status === 401 ? "pass" : "fail",
-      detail: `POST /api/telegram without the secret header returned ${res.status} (401 expected)`,
+      detail: detailFor(
+        res,
+        `POST /api/telegram without the secret header returned ${res.status} (401 expected)`,
+      ),
     };
   });
 
@@ -143,21 +177,28 @@ export async function runSmokeChecks(fetcher: SmokeFetcher, rawBase: string): Pr
     return {
       name: "stripe webhook refuses unsigned calls",
       status: ok ? "pass" : "fail",
-      detail: `POST /api/stripe/webhook without a signature returned ${res.status} (400 or 503 expected, never 200)`,
+      detail: detailFor(
+        res,
+        `POST /api/stripe/webhook without a signature returned ${res.status} (400 or 503 expected, never 200)`,
+      ),
     };
   });
 
   await check("telegram login rejects garbage", async () => {
     const res = await request(fetcher, base, "/auth/telegram?id=1&hash=deadbeef");
     const location = res.headers.get("location") ?? "";
+    if (location) redirectLocations.push(location);
     const redirected = res.status === 303 && location.includes("/login?error=failed");
     const setCookie = res.headers.get("set-cookie");
     return {
       name: "telegram login rejects garbage",
       status: redirected && setCookie == null ? "pass" : "fail",
-      detail: `GET /auth/telegram with garbage returned ${res.status} to ${location || "no location"}${
-        setCookie == null ? "" : " and it set a cookie, which it must not"
-      }`,
+      detail: detailFor(
+        res,
+        `GET /auth/telegram with garbage returned ${res.status} to ${location || "no location"}${
+          setCookie == null ? "" : " and it set a cookie, which it must not"
+        }`,
+      ),
     };
   });
 
@@ -176,6 +217,31 @@ export async function runSmokeChecks(fetcher: SmokeFetcher, rawBase: string): Pr
       };
     });
   }
+
+  await check("redirects stay on the public origin", async () => {
+    if (redirectLocations.length === 0) {
+      return {
+        name: "redirects stay on the public origin",
+        status: "warn",
+        detail: "no redirect was observed, so there was nothing to check",
+      };
+    }
+    const offenders = redirectLocations.filter(
+      (location) => !redirectStaysOnBaseOrigin(location, base),
+    );
+    if (offenders.length === 0) {
+      return {
+        name: "redirects stay on the public origin",
+        status: "pass",
+        detail: `all ${redirectLocations.length} redirect locations are relative or share the base origin`,
+      };
+    }
+    return {
+      name: "redirects stay on the public origin",
+      status: "fail",
+      detail: `redirects leave the base origin (${base}): ${offenders.join(", ")}`,
+    };
+  });
 
   if (base.startsWith("https://")) {
     await check("https landing is redirect free", async () => {

@@ -19,6 +19,8 @@ import {
 import { getSupabase } from "@/lib/db/client";
 import { getUserByTelegramId } from "@/lib/clarify/queries";
 import type { UserRow } from "@/lib/db/types";
+import { hasAcceptedCurrentTerms } from "@/lib/legal/consent";
+import { CONSENT_PAY_FIRST } from "@/lib/legal/consent-copy";
 import {
   PRE_CHECKOUT_CLOSED_REPLY,
   commandFailedReply,
@@ -79,6 +81,13 @@ export function createProCommand(deps: PaymentsDeps) {
         // Only possible before the student's first message upserted a row;
         // there is nobody to bill, so this reads like any other hiccup.
         await ctx.reply(commandFailedReply());
+        return;
+      }
+      // Defense in depth: the consent middleware already gates /pro, but an
+      // invoice must never be created without a current acceptance even if a
+      // version bump races the request.
+      if (!hasAcceptedCurrentTerms(user)) {
+        await ctx.reply(CONSENT_PAY_FIRST);
         return;
       }
       const active = await deps.getActiveSubscription(user.id, new Date());

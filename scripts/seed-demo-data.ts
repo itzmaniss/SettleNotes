@@ -12,6 +12,7 @@ import type {
   UploadKind,
 } from "../lib/db/types";
 import type { StarterContent } from "../lib/starters/types";
+import { TERMS_VERSION } from "../lib/legal/version";
 
 // ---------- shapes ----------
 
@@ -87,6 +88,13 @@ export type DemoData = {
 };
 
 export type BuildDemoDataOpts = { demoName?: string };
+
+// The demo account's acceptance, so the seeded user walks straight through
+// the consent gate in the bot and on the web. Stamped with TERMS_VERSION at
+// seed time, exactly like a real acceptance.
+export function demoTerms(now: Date): { termsAcceptedAt: Date; termsVersion: string } {
+  return { termsAcceptedAt: now, termsVersion: TERMS_VERSION };
+}
 
 // ---------- SGT date helpers ----------
 

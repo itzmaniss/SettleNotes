@@ -62,12 +62,13 @@ The sample `deploy/docker-compose.yml` points at `/opt/settle.env`. Change that 
 
 ## Database
 
-1. Open the Supabase SQL editor and run the three migration files in order, one at a time:
+1. Open the Supabase SQL editor and run the migration files in order, one at a time:
    - `supabase/migrations/0001_init.sql`
    - `supabase/migrations/0002_billing.sql`
    - `supabase/migrations/0003_pending_actions.sql`
+   - `supabase/migrations/0004_terms_acceptance.sql`
 
-   0002 creates the billing tables that sit dormant behind `BILLING_ENABLED=false` (the usage ledger writes from day one), so apply all three. Alternative: `supabase link` then `supabase db push` using `SUPABASE_DB_URL`.
+   0002 creates the billing tables that sit dormant behind `BILLING_ENABLED=false` (the usage ledger writes from day one), so apply all of them. 0004 adds the terms acceptance columns the bot and web gates require. Alternative: `supabase link` then `supabase db push` using `SUPABASE_DB_URL`.
 2. Create the private `uploads` bucket. The SQL way, in the same editor:
 
 ```sql

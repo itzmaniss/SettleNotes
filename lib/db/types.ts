@@ -26,6 +26,10 @@ export type UserRow = {
   telegram_chat_id: number;
   first_name: string | null;
   timezone: string;
+  // Set together the moment the person accepts the current Terms and Privacy
+  // Policy. Null on rows from before migration 0004 means not accepted yet.
+  terms_accepted_at: string | null;
+  terms_version: string | null;
   created_at: string;
 };
 

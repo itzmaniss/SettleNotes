@@ -165,8 +165,77 @@ describe("runSmokeChecks", () => {
     const { fetcher } = fakeServer({});
     const results = await runSmokeChecks(fetcher, BASE);
     expect(results.length).toBeGreaterThan(0);
-    expect(results.every((r) => r.status === "fail")).toBe(true);
+    // Every check fails, except the origin check which saw no redirects at
+    // all and warns instead.
+    for (const result of results) {
+      if (result.name === "redirects stay on the public origin") {
+        expect(result.status).toBe("warn");
+      } else {
+        expect(result.status).toBe("fail");
+      }
+    }
     expect(results[0].detail).toContain("connection refused");
+  });
+});
+
+describe("redirect origin and configuration hints", () => {
+  test("a redirect built from the container host fails the origin check and is named", async () => {
+    const routes = healthyRoutes();
+    routes[`GET ${BASE}/dashboard`] = {
+      status: 307,
+      headers: { location: "http://0.0.0.0:3000/auth/expired" },
+    };
+    const { fetcher } = fakeServer(routes);
+    const results = await runSmokeChecks(fetcher, BASE);
+    const origin = results.find((r) => r.name === "redirects stay on the public origin");
+    expect(origin?.status).toBe("fail");
+    expect(origin?.detail).toContain("http://0.0.0.0:3000/auth/expired");
+    expect(results.filter((r) => r.status === "fail").length).toBeGreaterThan(0);
+  });
+
+  test("relative and same-origin redirect locations pass", async () => {
+    const routes = healthyRoutes();
+    routes[`GET ${BASE}/dashboard`] = { status: 307, headers: { location: "/auth/expired" } };
+    routes[`GET ${GARBAGE_LOGIN}`] = {
+      status: 303,
+      headers: { location: `${BASE}/login?error=failed` },
+    };
+    const { fetcher } = fakeServer(routes);
+    const results = await runSmokeChecks(fetcher, BASE);
+    const origin = results.find((r) => r.name === "redirects stay on the public origin");
+    expect(origin?.status).toBe("pass");
+    expect(origin?.detail).toContain("all 5 redirect locations");
+  });
+
+  test("a foreign origin with the same path shape is still an offender", async () => {
+    const routes = healthyRoutes();
+    routes[`GET ${GARBAGE_LOGIN}`] = {
+      status: 303,
+      headers: { location: "https://evil.test/login?error=failed" },
+    };
+    const { fetcher } = fakeServer(routes);
+    const results = await runSmokeChecks(fetcher, BASE);
+    const origin = results.find((r) => r.name === "redirects stay on the public origin");
+    expect(origin?.status).toBe("fail");
+    expect(origin?.detail).toContain("https://evil.test/login?error=failed");
+  });
+
+  test("a 500 anywhere gets the configuration hint in the detail", async () => {
+    const routes = healthyRoutes();
+    routes[`GET ${BASE}/login`] = { status: 500, body: "error" };
+    routes[`GET ${BASE}/api/health`] = { status: 500, body: "error" };
+    const { fetcher } = fakeServer(routes);
+    const results = await runSmokeChecks(fetcher, BASE);
+    for (const name of ["login page", "health endpoint"]) {
+      const result = results.find((r) => r.name === name);
+      expect(result?.detail, name).toContain("is the server configured?");
+    }
+  });
+
+  test("a healthy run never shows the configuration hint", async () => {
+    const { fetcher } = fakeServer(healthyRoutes());
+    const results = await runSmokeChecks(fetcher, BASE);
+    expect(results.some((r) => r.detail.includes("is the server configured?"))).toBe(false);
   });
 });
 

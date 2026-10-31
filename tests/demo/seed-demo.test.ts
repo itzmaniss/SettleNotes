@@ -7,6 +7,7 @@ import { describe, expect, test } from "bun:test";
 import {
   DEMO_UPLOAD_MARKER,
   buildDemoData,
+  demoTerms,
   formatDryRunPlan,
   parseSeedArgs,
   type DemoData,
@@ -268,5 +269,20 @@ describe("formatDryRunPlan", () => {
     expect(text).toContain(`${data.weakSpots.length} weak spots`);
     expect(text).toContain("--yes");
     expect(text).toContain("nothing has been written");
+  });
+});
+
+describe("demoTerms", () => {
+  test("the seeded user counts as accepted by the consent gate", async () => {
+    const { hasAcceptedCurrentTerms } = await import("../../lib/legal/consent");
+    const terms = demoTerms(NOW);
+    expect(terms.termsAcceptedAt).toBe(NOW);
+    expect(terms.termsVersion).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(
+      hasAcceptedCurrentTerms({
+        terms_accepted_at: terms.termsAcceptedAt.toISOString(),
+        terms_version: terms.termsVersion,
+      }),
+    ).toBe(true);
   });
 });

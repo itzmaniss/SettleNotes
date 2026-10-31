@@ -248,6 +248,21 @@ export function commandFailedReply(): string {
 
 const DASHBOARD_PATH = "/dashboard";
 
+// The /start welcome. Lives here with the rest of the student facing copy so
+// the consent accept flow (lib/telegram/consent.ts) can reuse it verbatim.
+export function startText(firstName: string | null, dashboardUrl: string): string {
+  const greeting = firstName ? `Hi ${firstName}!` : "Hi!";
+  return [
+    `${greeting} I am Settle, your study catch-up buddy.`,
+    "",
+    "Forward me class group chat messages, send assignment PDFs, lecture slides, photos of your math working, or just talk to me. I turn all of it into one tidy task list, keep an eye on deadlines, and build practice from your weak spots.",
+    "",
+    `Open your dashboard anytime: ${dashboardUrl}`,
+    "",
+    "Send /help to see exactly what I understand.",
+  ].join("\n");
+}
+
 /**
  * 'Open dashboard' URL button, but only for URLs Telegram accepts (https and
  * not loopback, otherwise the whole reply send would fail). Undefined means

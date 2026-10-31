@@ -10,9 +10,19 @@ import {
 import { upsertUser } from "@/lib/db/queries";
 import { createPendingActionCallback, type CallbackContextLike } from "@/lib/telegram/callbacks";
 import { getAccessPolicy } from "@/lib/telegram/access";
-import { allowlistMiddleware, registerIngestHandlers } from "@/lib/telegram/handlers";
+import {
+  allowlistMiddleware,
+  registerIngestHandlers,
+} from "@/lib/telegram/handlers";
+import {
+  createConsentAcceptHandler,
+  consentMiddleware,
+  createConsentDeps,
+  type ConsentCallbackContextLike,
+  type ConsentDeps,
+} from "@/lib/telegram/consent";
 import { registerPaymentHandlers } from "@/lib/telegram/payments";
-import { PRE_CHECKOUT_CLOSED_REPLY, REFUSAL_TEXT } from "@/lib/telegram/replies";
+import { PRE_CHECKOUT_CLOSED_REPLY, REFUSAL_TEXT, startText } from "@/lib/telegram/replies";
 
 // The token is only read when getBot() first runs, never at import time, so
 // `next build` and the test runner never need env vars just to import this.
@@ -59,7 +69,12 @@ function createBot(): Bot {
         }),
     ),
   );
-  registerHandlers(bot);
+  // Second middleware: nothing about a sender is stored or processed until
+  // they have accepted the current Terms and Privacy Policy. Shared with
+  // registerHandlers so the accept callback and the gate see the same deps.
+  const consentDeps = createConsentDeps();
+  bot.use(consentMiddleware(consentDeps));
+  registerHandlers(bot, consentDeps);
   bot.catch((error: BotError) => {
     console.error("[telegram] handler error", error.error);
   });
@@ -69,8 +84,10 @@ function createBot(): Bot {
 // The /start, /help, /dashboard, /tasks and /done handlers below are final;
 // registerIngestHandlers adds the text, photo, document and catch-all message
 // handlers after them, so a "/tasks" text always reaches its command handler
-// first and never the generic text handler.
-export function registerHandlers(bot: Bot): void {
+// first and never the generic text handler. consentDeps wires the tc:ok accept
+// callback, which must sit before the pending action callback so a consent tap
+// never falls into the pa: resolver.
+export function registerHandlers(bot: Bot, consentDeps: ConsentDeps = createConsentDeps()): void {
   bot.command("start", async (ctx) => {
     const from = ctx.from;
     if (!from) return;
@@ -95,6 +112,14 @@ export function registerHandlers(bot: Bot): void {
   const doneCommand = createDoneCommand();
   bot.command("done", (ctx) => doneCommand(ctx as unknown as CommandContextLike));
 
+  // The consent accept tap. Registered BEFORE the pending action callback: a
+  // non tc:ok callback is handed to next() here, so pa: taps still reach it,
+  // while tc:ok never can.
+  const consentAccept = createConsentAcceptHandler(consentDeps);
+  bot.on("callback_query:data", (ctx, next) =>
+    consentAccept(ctx as unknown as ConsentCallbackContextLike, next),
+  );
+
   // Taps on the Yes/No buttons of a low-confidence clarification. The
   // allowlist middleware above runs first for callback updates too (they carry
   // ctx.from), so a stranger's tap is refused before reaching this.
@@ -109,19 +134,6 @@ export function registerHandlers(bot: Bot): void {
   registerPaymentHandlers(bot);
 
   registerIngestHandlers(bot);
-}
-
-function startText(firstName: string | null, dashboardUrl: string): string {
-  const greeting = firstName ? `Hi ${firstName}!` : "Hi!";
-  return [
-    `${greeting} I am Settle, your study catch-up buddy.`,
-    "",
-    "Forward me class group chat messages, send assignment PDFs, lecture slides, photos of your math working, or just talk to me. I turn all of it into one tidy task list, keep an eye on deadlines, and build practice from your weak spots.",
-    "",
-    `Open your dashboard anytime: ${dashboardUrl}`,
-    "",
-    "Send /help to see exactly what I understand.",
-  ].join("\n");
 }
 
 export const HELP_TEXT = [

@@ -19,6 +19,8 @@ const user: UserRow = {
   telegram_chat_id: 101,
   first_name: "Tim",
   timezone: "Asia/Singapore",
+  terms_accepted_at: null,
+  terms_version: null,
   created_at: "2026-10-01T01:00:00.000Z",
 };
 

@@ -19,6 +19,8 @@ import { TELEGRAM_ALLOWED_UPDATES } from "../../lib/telegram/callbacks";
 import { handleWebhook, senderIdOf } from "../../lib/telegram/guards";
 import { PLANS } from "../../lib/billing/plans";
 import { buildStarsPayload } from "../../lib/billing/stars";
+import { TERMS_VERSION } from "../../lib/legal/version";
+import { CONSENT_PAY_FIRST } from "../../lib/legal/consent-copy";
 import {
   PRE_CHECKOUT_CLOSED_REPLY,
   paySupportReply,
@@ -32,6 +34,7 @@ import { ALLOWED_ID, SECRET, STRANGER_ID, webhookRequest } from "./fixtures";
 
 const USER_UUID = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d";
 const CHARGE_ID = "charge-1";
+const NOW_ISO = "2026-10-31T01:00:00.000Z";
 
 // ---- shared fakes ----------------------------------------------------------
 
@@ -90,23 +93,24 @@ type PaymentsDepsSpy = PaymentsDeps & {
 };
 
 function makeDeps(
-  overrides: Partial<PaymentsDeps> & { userUuid?: string } = {},
+  overrides: Partial<PaymentsDeps> & { userUuid?: string; userAccepted?: boolean } = {},
 ): PaymentsDepsSpy {
   const invoices: Array<{ userId: string; amount: number }> = [];
   const userUuid = overrides.userUuid ?? USER_UUID;
+  const userAccepted = overrides.userAccepted ?? true;
+  const makeUser = () => ({
+    id: userUuid,
+    telegram_user_id: ALLOWED_ID,
+    telegram_chat_id: ALLOWED_ID,
+    first_name: "Tim",
+    timezone: "Asia/Singapore",
+    terms_accepted_at: userAccepted ? NOW_ISO : null,
+    terms_version: userAccepted ? TERMS_VERSION : null,
+    created_at: "2026-10-01T01:00:00.000Z",
+  });
   return {
     billingEnabled: () => true,
-    getUserByTelegramId: async (id) =>
-      id === ALLOWED_ID
-        ? {
-            id: userUuid,
-            telegram_user_id: id,
-            telegram_chat_id: id,
-            first_name: "Tim",
-            timezone: "Asia/Singapore",
-            created_at: "2026-10-01T01:00:00.000Z",
-          }
-        : null,
+    getUserByTelegramId: async (id) => (id === ALLOWED_ID ? makeUser() : null),
     getActiveSubscription: async () => null,
     createInvoiceLink: async (args) => {
       invoices.push(args);
@@ -175,6 +179,33 @@ describe("/pro command", () => {
     const { ctx, replies } = makeCtx({ fromId: ALLOWED_ID });
     await createProCommand(deps)(ctx);
     expect(replies.map((r) => r.text)).toEqual([proNotOnSaleReply()]);
+    expect(deps.invoices).toHaveLength(0);
+  });
+
+  test("an unaccepted user is refused with the pay line and no invoice is created", async () => {
+    const deps = makeDeps({ userAccepted: false });
+    const { ctx, replies } = makeCtx({ fromId: ALLOWED_ID });
+    await createProCommand(deps)(ctx);
+
+    expect(replies.map((r) => r.text)).toEqual([CONSENT_PAY_FIRST]);
+    expect(deps.invoices).toHaveLength(0);
+    expect(replies[0].text).toContain("not been charged");
+    expect(replies[0].text).not.toMatch(/[\u2013\u2014]/);
+  });
+
+  test("a user on an old terms version is refused too", async () => {
+    // Simulate a stale row by making the fake lookup return a user whose
+    // version cannot match the current TERMS_VERSION.
+    const deps = makeDeps();
+    const real = deps.getUserByTelegramId;
+    deps.getUserByTelegramId = async (id) => {
+      const user = await real(id);
+      return user == null ? null : { ...user, terms_version: "2020-01-01", terms_accepted_at: "2020-01-01T00:00:00.000Z" };
+    };
+    const { ctx, replies } = makeCtx({ fromId: ALLOWED_ID });
+    await createProCommand(deps)(ctx);
+
+    expect(replies.map((r) => r.text)).toEqual([CONSENT_PAY_FIRST]);
     expect(deps.invoices).toHaveLength(0);
   });
 

@@ -18,6 +18,7 @@ import { annotatedPath, originalPath, uploadBuffer } from "../lib/media/storage"
 import {
   DEMO_UPLOAD_MARKER,
   buildDemoData,
+  demoTerms,
   formatDryRunPlan,
   parseSeedArgs,
   type DemoData,
@@ -219,6 +220,8 @@ async function seed(args: SeedArgs): Promise<void> {
     telegramUserId: args.telegramId,
     telegramChatId: args.telegramId, // DM chat id equals the user id in Telegram
     firstName: args.name ?? existing?.first_name ?? null,
+    // The demo account must pass the consent gate like a real user.
+    ...demoTerms(new Date()),
   });
   console.log(`Seeding as Telegram user ${args.telegramId} (row ${user.id}).`);
 

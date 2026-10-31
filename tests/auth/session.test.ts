@@ -6,6 +6,7 @@ import {
   createSessionToken,
   serializeSessionCookie,
   sessionCookieOptions,
+  sessionGateFor,
   verifySessionToken,
 } from "../../lib/auth/session";
 import { signSessionJwt } from "../../lib/auth/jwt";
@@ -142,5 +143,42 @@ describe("session cookie options", () => {
     expect(await verifySessionToken(token, { secret: SECRET, now: () => NOW })).toEqual({
       userId: "user-2",
     });
+  });
+});
+
+describe("sessionGateFor (the requireSessionUser acceptance decision)", () => {
+  const acceptedRow = {
+    id: "user-1",
+    telegram_user_id: 101,
+    telegram_chat_id: 101,
+    first_name: "Tim",
+    timezone: "Asia/Singapore",
+    terms_accepted_at: "2026-10-31T01:00:00.000Z",
+    terms_version: "2026-11-01",
+    created_at: "2026-10-01T01:00:00.000Z",
+  };
+  const staleRow = { ...acceptedRow, terms_accepted_at: null, terms_version: null };
+
+  test("an accepted row renders", () => {
+    expect(sessionGateFor(acceptedRow, "/billing")).toEqual({ kind: "ok" });
+  });
+
+  test("a missing or stale acceptance goes to /accept with a back-link", () => {
+    expect(sessionGateFor(staleRow, "/billing")).toEqual({
+      kind: "accept",
+      location: "/accept?next=%2Fbilling",
+    });
+    expect(sessionGateFor({ ...staleRow, terms_version: "2020-01-01", terms_accepted_at: "2020-01-01T00:00:00.000Z" }, "/tasks/3")).toEqual({
+      kind: "accept",
+      location: "/accept?next=%2Ftasks%2F3",
+    });
+  });
+
+  test("without a stamped path the bare /accept is used", () => {
+    expect(sessionGateFor(staleRow, null)).toEqual({ kind: "accept", location: "/accept" });
+  });
+
+  test("a row that is gone is expired, failing closed", () => {
+    expect(sessionGateFor(null, "/billing")).toEqual({ kind: "expired" });
   });
 });

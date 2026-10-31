@@ -8,11 +8,16 @@ import {
   verifyTelegramLogin,
   type TelegramLoginDeps,
 } from "../../lib/auth/telegram-login";
+import { verifyConsentToken } from "../../lib/auth/consent-cookie";
+import type { UserRow } from "../../lib/db/types";
+import { TERMS_VERSION } from "../../lib/legal/version";
 
 const BOT_TOKEN = "123456:TestTokenForVectorDoNotUse";
 const OTHER_TOKEN = "123456:AnotherTokenEntirely";
 const AUTH_DATE = 1760000000;
 const NOW = new Date(AUTH_DATE * 1000);
+const CONSENT_SECRET = "login-consent-secret-16ch";
+const APP_BASE_URL = "https://settle.example.com";
 
 // Pinned independently computed vectors (sha256 of token, hmac over the
 // documented data check string). If the implementation drifts from Telegram's
@@ -56,7 +61,28 @@ type FakeDeps = {
   lookupCalls: number[];
 };
 
-function makeDeps(overrides: Partial<Deps> = {}, existing: { id: string; telegramChatId: number } | null = null): FakeDeps {
+function acceptedExistingRow(id: string, chatId: number): UserRow {
+  return {
+    id,
+    telegram_user_id: 900000001,
+    telegram_chat_id: chatId,
+    first_name: "Wei",
+    timezone: "Asia/Singapore",
+    terms_accepted_at: NOW.toISOString(),
+    terms_version: TERMS_VERSION,
+    created_at: "2026-10-01T01:00:00.000Z",
+  };
+}
+
+function staleExistingRow(id: string, chatId: number): UserRow {
+  return {
+    ...acceptedExistingRow(id, chatId),
+    terms_accepted_at: "2020-01-01T00:00:00.000Z",
+    terms_version: "2020-01-01",
+  };
+}
+
+function makeDeps(overrides: Partial<Deps> = {}, existing: UserRow | null = null): FakeDeps {
   const upsertCalls: FakeDeps["upsertCalls"] = [];
   const sessionCalls: string[] = [];
   const lookupCalls: number[] = [];
@@ -79,6 +105,8 @@ function makeDeps(overrides: Partial<Deps> = {}, existing: { id: string; telegra
         sessionCalls.push(userId);
         return `jwt-for-${userId}`;
       },
+      appBaseUrl: APP_BASE_URL,
+      consentSecret: CONSENT_SECRET,
       now: NOW,
       ...overrides,
     },
@@ -239,30 +267,43 @@ describe("verifyTelegramLogin", () => {
 });
 
 describe("completeTelegramLogin", () => {
-  test("allowlisted new user: upsert with chat id = telegram id, session created", async () => {
+  test("allowlisted new user: no row is created, outcome is a verifiable consent token", async () => {
     const ctx = makeDeps();
     const outcome = await completeTelegramLogin(ctx.deps, widgetParams(MINIMAL_FIELDS));
 
-    expect(outcome).toEqual({ kind: "ok", userId: "new-user-row", sessionToken: "jwt-for-new-user-row" });
+    expect(outcome.kind).toBe("consent");
+    if (outcome.kind === "consent") {
+      const claims = await verifyConsentToken(outcome.consentToken, CONSENT_SECRET, NOW);
+      expect(claims).toEqual({ tid: 900000001, fn: "Wei" });
+    }
     expect(ctx.lookupCalls).toEqual([900000001]);
-    expect(ctx.upsertCalls).toEqual([
-      { telegramUserId: 900000001, telegramChatId: 900000001, firstName: "Wei" },
-    ]);
-    expect(ctx.sessionCalls).toEqual(["new-user-row"]);
+    expect(ctx.upsertCalls).toEqual([]);
+    expect(ctx.sessionCalls).toEqual([]);
   });
 
-  test("existing user: first name refreshed, chat id untouched", async () => {
-    const ctx = makeDeps({}, { id: "user-1", telegramChatId: 555000 });
+  test("allowlisted stale user: no write either, consent token issued", async () => {
+    const ctx = makeDeps({}, staleExistingRow("user-1", 555000));
+    const outcome = await completeTelegramLogin(ctx.deps, widgetParams(MINIMAL_FIELDS));
+
+    expect(outcome.kind).toBe("consent");
+    expect(ctx.upsertCalls).toEqual([]);
+    expect(ctx.sessionCalls).toEqual([]);
+  });
+
+  test("accepted existing user: first name refreshed, chat id untouched, no terms fields in the upsert", async () => {
+    const ctx = makeDeps({}, acceptedExistingRow("user-1", 555000));
     const outcome = await completeTelegramLogin(ctx.deps, widgetParams(MINIMAL_FIELDS));
 
     expect(outcome).toEqual({ kind: "ok", userId: "user-1", sessionToken: "jwt-for-user-1" });
     expect(ctx.upsertCalls).toEqual([
       { telegramUserId: 900000001, telegramChatId: 555000, firstName: "Wei" },
     ]);
+    // The upsert carries no terms fields, so it can never clear the acceptance.
+    expect(JSON.stringify(ctx.upsertCalls)).not.toContain("terms");
   });
 
   test("stranger is denied and nothing is written or looked up", async () => {
-    const ctx = makeDeps({}, { id: "user-1", telegramChatId: 555000 });
+    const ctx = makeDeps({}, acceptedExistingRow("user-1", 555000));
     ctx.deps.access = [111111111];
 
     const outcome = await completeTelegramLogin(ctx.deps, widgetParams(FULL_FIELDS));

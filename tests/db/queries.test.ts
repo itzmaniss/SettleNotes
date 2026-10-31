@@ -351,6 +351,8 @@ describe("upsertUser", () => {
       telegram_chat_id: 888,
       first_name: "Wei Ming",
       timezone: "Asia/Singapore",
+      terms_accepted_at: null,
+      terms_version: null,
       created_at: "2026-10-30T00:00:00.000Z",
     };
     const q = createQueries(
@@ -467,5 +469,101 @@ describe("finishUpload", () => {
     expect(call.method).toBe("update");
     expect(call.filters).toEqual([{ op: "eq", column: "id", value: "up-1" }]);
     expect(call.payload).toEqual({ status: "failed", error: "boom" });
+  });
+});
+
+// Shared by the terms-semantics and getUserById assertions below.
+const row = {
+  id: "u-9",
+  telegram_user_id: 42,
+  telegram_chat_id: 42,
+  first_name: "Tim",
+  timezone: "Asia/Singapore",
+  terms_accepted_at: "2026-10-31T01:00:00.000Z",
+  terms_version: "2026-11-01",
+  created_at: "2026-10-30T00:00:00.000Z",
+};
+
+describe("upsertUser terms semantics", () => {
+  test("an upsert WITHOUT terms fields never writes them, so it cannot clear an acceptance", async () => {
+    const seen: RecordedCall[] = [];
+    const q = createQueries(
+      makeFakeClient((c) => {
+        seen.push(c);
+        return { data: row };
+      })
+    );
+    await q.upsertUser({ telegramUserId: 42, telegramChatId: 42, firstName: "Tim" });
+    expect(seen[0].payload).toEqual({
+      telegram_user_id: 42,
+      telegram_chat_id: 42,
+      first_name: "Tim",
+    });
+    expect(JSON.stringify(seen[0].payload)).not.toContain("terms_accepted_at");
+    expect(JSON.stringify(seen[0].payload)).not.toContain("terms_version");
+  });
+
+  test("an upsert WITH terms fields writes both, timestamp as ISO", async () => {
+    const seen: RecordedCall[] = [];
+    const q = createQueries(
+      makeFakeClient((c) => {
+        seen.push(c);
+        return { data: row };
+      })
+    );
+    await q.upsertUser({
+      telegramUserId: 42,
+      telegramChatId: 42,
+      firstName: "Tim",
+      termsAcceptedAt: new Date("2026-10-31T09:00:00.000Z"),
+      termsVersion: "2026-11-01",
+    });
+    expect(seen[0].payload).toEqual({
+      telegram_user_id: 42,
+      telegram_chat_id: 42,
+      first_name: "Tim",
+      terms_accepted_at: "2026-10-31T09:00:00.000Z",
+      terms_version: "2026-11-01",
+    });
+  });
+
+  test("an upsert with only the timestamp omits the version, and vice versa", async () => {
+    const seen: RecordedCall[] = [];
+    const q = createQueries(
+      makeFakeClient((c) => {
+        seen.push(c);
+        return { data: row };
+      })
+    );
+    await q.upsertUser({
+      telegramUserId: 42,
+      telegramChatId: 42,
+      firstName: null,
+      termsAcceptedAt: new Date("2026-10-31T09:00:00.000Z"),
+    });
+    expect(seen[0].payload).toHaveProperty("terms_accepted_at");
+    expect(seen[0].payload).not.toHaveProperty("terms_version");
+  });
+});
+
+describe("getUserById", () => {
+  test("selects by id only and returns null for no row", async () => {
+    const seen: RecordedCall[] = [];
+    const q = createQueries(
+      makeFakeClient((c) => {
+        seen.push(c);
+        return { data: null };
+      })
+    );
+    expect(await q.getUserById("nope")).toBeNull();
+    expect(seen[0].table).toBe("users");
+    expect(seen[0].filters).toEqual([{ op: "eq", column: "id", value: "nope" }]);
+  });
+
+  test("returns the row when it exists", async () => {
+    const q = createQueries(
+      makeFakeClient(() => ({ data: row }))
+    );
+    expect(await q.getUserById("u-9")).toEqual(row);
   });
 });

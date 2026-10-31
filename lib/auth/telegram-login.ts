@@ -10,9 +10,17 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "@/lib/env";
 import { upsertUser, type UpsertUserInput } from "@/lib/db/queries";
 import { getUserByTelegramId } from "@/lib/clarify/queries";
+import type { UserRow } from "@/lib/db/types";
+import { hasAcceptedCurrentTerms } from "@/lib/legal/consent";
 import { getAccessPolicy, isAccessAllowed, type AccessPolicy } from "@/lib/telegram/access";
-import { POST_LOGIN_PATH } from "./paths";
+import { createConsentToken, serializeConsentCookie } from "./consent-cookie";
+import { publicOrigin } from "./origin";
+import { acceptRedirectPath, safeNextPath } from "./paths";
 import { createSessionToken, serializeSessionCookie } from "./session";
+
+// Shared implementation; re-exported so existing callers and tests keep one
+// import surface.
+export { safeNextPath };
 
 const WIDGET_FIELDS = [
   "id",
@@ -119,34 +127,6 @@ export function verifyTelegramLogin(
   return { ok: true, user: { id: Number(id), firstName: firstName ?? null } };
 }
 
-export const LOGIN_NEXT_PREFIXES = ["/dashboard", "/tasks", "/weak-spots", "/billing"] as const;
-
-// The only open redirect surface on this route: a next param survives if it is
-// a same-site relative path (single leading slash), has no backslash, dot-dot
-// or encoded dot-dot, and sits under an allowed prefix. Everything else,
-// including //evil.com, https://evil.com and /\evil, falls back to /dashboard.
-export function safeNextPath(raw: string | null | undefined): string {
-  if (typeof raw !== "string" || raw.length === 0 || raw.trim() !== raw) {
-    return POST_LOGIN_PATH;
-  }
-  if (!raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) {
-    return POST_LOGIN_PATH;
-  }
-  let path = raw;
-  try {
-    path = decodeURIComponent(raw);
-  } catch {
-    return POST_LOGIN_PATH;
-  }
-  if (path.includes("\\") || /[\r\n]/.test(path) || path.split("/").includes("..")) {
-    return POST_LOGIN_PATH;
-  }
-  const allowed = LOGIN_NEXT_PREFIXES.some(
-    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
-  );
-  return allowed ? path : POST_LOGIN_PATH;
-}
-
 export type TelegramLoginTarget = { botUsername: string; authUrl: string };
 
 // Decides whether the widget can render at all: BotFather only lets the widget
@@ -193,18 +173,24 @@ export type TelegramLoginDeps = {
   /** Access policy from lib/telegram/access.getAccessPolicy (bare id list ok). */
   access: AccessPolicy | number[];
   /** Real impl resolves to lib/clarify/queries.getUserByTelegramId. */
-  getUserByTelegramId: (
-    telegramUserId: number,
-  ) => Promise<{ id: string; telegramChatId: number } | null>;
+  getUserByTelegramId: (telegramUserId: number) => Promise<UserRow | null>;
   /** Real impl is lib/db/queries.upsertUser. */
   upsertUser: (input: UpsertUserInput) => Promise<{ id: string }>;
   /** Real impl is createSessionToken, the same session the magic link issues. */
   createSession: (userId: string) => Promise<string>;
+  // Public origin every redirect is built from; never request.url (behind a
+  // proxy that is the container's internal address).
+  appBaseUrl: string;
+  // Signs the short lived consent handoff cookie; same secret as sessions.
+  consentSecret: string;
   now: Date;
 };
 
 export type TelegramLoginOutcome =
   | { kind: "ok"; userId: string; sessionToken: string }
+  // Verified visitor without a current acceptance: no row is touched here, the
+  // /accept page and its action finish the job.
+  | { kind: "consent"; consentToken: string }
   | { kind: "denied" }
   | { kind: "invalid" };
 
@@ -222,15 +208,24 @@ export async function completeTelegramLogin(
   if (!isAccessAllowed(verified.user.id, deps.access)) return { kind: "denied" };
 
   const existing = await deps.getUserByTelegramId(verified.user.id);
-  // A private chat id equals the Telegram user id, so a web first account uses
-  // it; the bot still cannot message them until they send /start. An existing
-  // row keeps the chat id it already has, so web login never rewrites it.
-  const input: UpsertUserInput = {
+  // Affirmative acceptance before any account write: a visitor with no row, or
+  // one whose acceptance is missing or older than TERMS_VERSION, is sent to
+  // /accept instead. Their identity rides in a 10 minute signed cookie.
+  if (existing == null || !hasAcceptedCurrentTerms(existing)) {
+    const consentToken = await createConsentToken(
+      { tid: verified.user.id, fn: verified.user.firstName },
+      deps.consentSecret,
+      deps.now,
+    );
+    return { kind: "consent", consentToken };
+  }
+  // Accepted: the row exists, so the upsert only refreshes name and chat id.
+  // It carries no terms fields, so it can never clear the stored acceptance.
+  const row = await deps.upsertUser({
     telegramUserId: verified.user.id,
-    telegramChatId: existing ? existing.telegramChatId : verified.user.id,
+    telegramChatId: existing.telegram_chat_id,
     firstName: verified.user.firstName,
-  };
-  const row = await deps.upsertUser(input);
+  });
   const sessionToken = await deps.createSession(row.id);
   return { kind: "ok", userId: row.id, sessionToken };
 }
@@ -260,6 +255,9 @@ function absolute(path: string, origin: string): string {
 // The GET logic behind app/auth/telegram, with deps injected so tests run
 // without env, network or database. Nothing here logs the query string.
 export async function handleTelegramLogin(request: Request, deps: TelegramLoginDeps): Promise<Response> {
+  // Every redirect is built from the configured public origin; request.url is
+  // only the fallback for local dev because behind Caddy it is 0.0.0.0:3000.
+  const origin = publicOrigin(deps.appBaseUrl, request.url);
   const url = new URL(request.url);
   const params: TelegramLoginParams = {};
   for (const key of new Set(url.searchParams.keys())) {
@@ -273,11 +271,15 @@ export async function handleTelegramLogin(request: Request, deps: TelegramLoginD
   const outcome = await completeTelegramLogin(deps, params);
   if (outcome.kind === "ok") {
     // Same cookie flags as the magic link route: flags follow the origin scheme.
-    const cookie = serializeSessionCookie(outcome.sessionToken, url.origin);
-    return loginRedirect(absolute(safeNextPath(url.searchParams.get("next")), url.origin), cookie);
+    const cookie = serializeSessionCookie(outcome.sessionToken, origin);
+    return loginRedirect(absolute(safeNextPath(url.searchParams.get("next")), origin), cookie);
+  }
+  if (outcome.kind === "consent") {
+    const cookie = serializeConsentCookie(outcome.consentToken, origin);
+    return loginRedirect(absolute(acceptRedirectPath(url.searchParams.get("next")), origin), cookie);
   }
   const error = outcome.kind === "denied" ? "not_invited" : "failed";
-  return loginRedirect(absolute(`/login?error=${error}`, url.origin));
+  return loginRedirect(absolute(`/login?error=${error}`, origin));
 }
 
 // Real deps resolved lazily so importing this module never reads env and never
@@ -291,16 +293,19 @@ export function realTelegramLoginDeps(): TelegramLoginDeps {
       return getAccessPolicy();
     },
     get getUserByTelegramId() {
-      return async (telegramUserId: number) => {
-        const row = await getUserByTelegramId(telegramUserId);
-        return row ? { id: row.id, telegramChatId: row.telegram_chat_id } : null;
-      };
+      return getUserByTelegramId;
     },
     get upsertUser() {
       return upsertUser;
     },
     get createSession() {
       return (userId: string) => createSessionToken(userId);
+    },
+    get appBaseUrl() {
+      return env.APP_BASE_URL;
+    },
+    get consentSecret() {
+      return env.SESSION_SECRET;
     },
     now: new Date(),
   };

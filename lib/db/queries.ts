@@ -19,6 +19,10 @@ export type UpsertUserInput = {
   telegramUserId: number;
   telegramChatId: number;
   firstName: string | null;
+  // Optional on purpose: an upsert WITHOUT these must never clear an existing
+  // acceptance, so they are only written when provided.
+  termsAcceptedAt?: Date;
+  termsVersion?: string;
 };
 
 export type CreateUploadInput = {
@@ -122,20 +126,34 @@ function startOfSgtDayUtc(now: Date): Date {
 export function createQueries(client: SupabaseClient) {
   return {
     async upsertUser(i: UpsertUserInput): Promise<UserRow> {
+      const row: Record<string, unknown> = {
+        telegram_user_id: i.telegramUserId,
+        telegram_chat_id: i.telegramChatId,
+        first_name: i.firstName,
+      };
+      // Terms columns are written only when provided, so a plain upsert from
+      // any existing handler keeps the acceptance that is already stored.
+      if (i.termsAcceptedAt !== undefined) row.terms_accepted_at = i.termsAcceptedAt.toISOString();
+      if (i.termsVersion !== undefined) row.terms_version = i.termsVersion;
       const { data, error } = await client
         .from("users")
-        .upsert(
-          {
-            telegram_user_id: i.telegramUserId,
-            telegram_chat_id: i.telegramChatId,
-            first_name: i.firstName,
-          },
-          { onConflict: "telegram_user_id" }
-        )
+        .upsert(row, { onConflict: "telegram_user_id" })
         .select()
         .single();
       if (error) throwDb("upsertUser", error);
       return data as UserRow;
+    },
+
+    // Used by the acceptance gate: the session JWT carries only the user id,
+    // so requireSessionUser and the /accept action resolve it to a row first.
+    async getUserById(id: string): Promise<UserRow | null> {
+      const { data, error } = await client
+        .from("users")
+        .select()
+        .eq("id", id)
+        .maybeSingle();
+      if (error) throwDb("getUserById", error);
+      return (data as UserRow | null) ?? null;
     },
 
     async markUpdateSeen(updateId: number): Promise<boolean> {
@@ -406,6 +424,10 @@ export type Queries = ReturnType<typeof createQueries>;
 // time so importing this module never touches the environment.
 export function upsertUser(i: UpsertUserInput): Promise<UserRow> {
   return createQueries(getSupabase()).upsertUser(i);
+}
+
+export function getUserById(id: string): Promise<UserRow | null> {
+  return createQueries(getSupabase()).getUserById(id);
 }
 
 export function markUpdateSeen(updateId: number): Promise<boolean> {

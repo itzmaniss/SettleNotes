@@ -65,6 +65,8 @@ function loginDeps(access: number[] | TelegramLoginDeps["access"]): TelegramLogi
     getUserByTelegramId: async () => null,
     upsertUser: async () => ({ id: "user-1" }),
     createSession: async () => "session-token",
+    appBaseUrl: "https://settle.example.com",
+    consentSecret: "access-test-consent-secret",
     now: new Date("2026-10-31T04:00:00.000Z"),
   };
 }
@@ -244,12 +246,14 @@ describe("call sites honour the policy", () => {
     expect(refusals).toEqual([STRANGER_ID]);
   });
 
-  test("web login: allowlist mode denies an unlisted verified user, open mode admits them", async () => {
+  test("web login: allowlist mode denies an unlisted verified user, open mode sends them to consent", async () => {
     const params = signedLoginParams();
     const denied = await completeTelegramLogin(loginDeps(resolveAccessPolicy(ALLOWED)), params);
     expect(denied.kind).toBe("denied");
+    // Open mode admits the verified visitor, but with no accepted row the
+    // outcome is the consent handoff, never a session.
     const allowed = await completeTelegramLogin(loginDeps(resolveAccessPolicy(OPEN)), params);
-    expect(allowed.kind).toBe("ok");
+    expect(allowed.kind).toBe("consent");
   });
 
   test("web login: open mode still verifies the Telegram hash first", async () => {
