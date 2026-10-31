@@ -255,6 +255,30 @@ describe("starterLine", () => {
     expect(starterLine(null)).toBeNull();
     expect(starterLine(undefined)).toBeNull();
   });
+
+  test("a blocked starter passes the quota text through verbatim, without selling", () => {
+    const quotaText =
+      "You've used your 1 free brief checklist for October. They reset on 1 Nov. Your deadlines and weak spots are still tracked as usual. Send /dashboard to see your plan.";
+    expect(starterLine({ status: "blocked", text: quotaText })).toBe(quotaText);
+    assertNoDashes(quotaText);
+    expect(quotaText.toLowerCase()).not.toMatch(/\b(buy|upgrade|subscribe|price|pricing|checkout)\b/);
+    expect(quotaText).not.toContain("S$");
+    expect(quotaText).not.toMatch(/https?:\/\//i);
+  });
+
+  test("the blocked line is the last line of the capture summary", () => {
+    const quotaText =
+      "You've used your 1 free brief checklist for October. They reset on 1 Nov. Your deadlines and weak spots are still tracked as usual. Send /dashboard to see your plan.";
+    const text = summaryReply({
+      result: { created: [createdTask("t1", "CS2030 Lab 4", "2026-11-06T15:59:00.000Z")], updated: [], completed: [], clarify: [] },
+      clarification: null,
+      starter: { status: "blocked", text: quotaText },
+    });
+    expect(text).toBe(
+      "Added 1 task:\n- CS2030 Lab 4 (due Fri 6 Nov, 11:59pm)\n" + quotaText,
+    );
+    assertNoDashes(text);
+  });
 });
 
 describe("fixed replies", () => {

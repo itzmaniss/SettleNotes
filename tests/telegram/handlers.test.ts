@@ -594,6 +594,45 @@ describe("math diagnosis replies", () => {
   });
 });
 
+describe("quota refused math photo", () => {
+  const photoMessage = {
+    photo: [{ file_id: "photo-1", width: 100, height: 100 }],
+    caption: null,
+    date: 1,
+    chat: { id: 101, type: "private" },
+    from: { id: 101, is_bot: false, first_name: "Tim" },
+  };
+
+  test("the quota outcome sends one plain text reply, no photo and no keyboard", async () => {
+    const jpeg = await tinyJpeg();
+    const spy = makeCtx(photoMessage);
+    const quotaText =
+      "You've used your 3 free math checks for October. They reset on 1 Nov. Your deadlines and weak spots are still tracked as usual. Send /dashboard to see your plan.";
+    const { deps, finished } = makeDeps({
+      fileBuffer: jpeg,
+      ingestOutcome: { kind: "quota", text: quotaText },
+    });
+
+    await handlePhotoMessage(spy.ctx, deps);
+
+    expect(spy.replies).toHaveLength(1);
+    expect(spy.replies[0].text).toBe(quotaText);
+    expect(spy.replies[0].other).toBeUndefined(); // no dashboard keyboard gimmick
+    expect(spy.photos).toHaveLength(0); // no annotated photo
+    // The reply states the limit and points to the dashboard; it never sells.
+    expect(quotaText.toLowerCase()).not.toMatch(/\b(buy|upgrade|subscribe|price|pricing|checkout)\b/);
+    expect(quotaText).not.toContain("S$");
+    assertNoDashes(quotaText);
+    // The upload was still finished by the pipeline, not marked failed.
+    expect(finished[0].patch.status).toBe("done");
+  });
+});
+
+function assertNoDashes(text: string): void {
+  expect(text.includes("\u2014")).toBe(false);
+  expect(text.includes("\u2013")).toBe(false);
+}
+
 describe("allowlistMiddleware", () => {
   function fakeContext(fromId?: number, chatId?: number): Context {
     return {

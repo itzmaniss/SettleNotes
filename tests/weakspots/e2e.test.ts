@@ -175,6 +175,12 @@ describe("weak-spot loop end to end", () => {
         created_at: NOW.toISOString(),
       }),
       uploadBuffer: async () => {},
+      // Billing fakes: this e2e must never reach the real usage ledger (the
+      // 0002 migration may not be applied), and a real claim would resolve
+      // the shared env cache mid-suite and break later env-pinning tests.
+      claimFeature: async () => ({ ok: true as const, usageId: "", plan: "pro" as const }),
+      consumeUsage: async () => {},
+      releaseUsage: async () => {},
       now: () => NOW,
       onDiagnosisRecorded: createDiagnosisRecorder(recorder.deps),
     });
@@ -232,6 +238,12 @@ describe("weak-spot loop end to end", () => {
         created_at: NOW.toISOString(),
       }),
       uploadBuffer: async () => {},
+      // Billing fakes: this e2e must never reach the real usage ledger (the
+      // 0002 migration may not be applied), and a real claim would resolve
+      // the shared env cache mid-suite and break later env-pinning tests.
+      claimFeature: async () => ({ ok: true as const, usageId: "", plan: "pro" as const }),
+      consumeUsage: async () => {},
+      releaseUsage: async () => {},
       now: () => NOW,
       onDiagnosisRecorded: createDiagnosisRecorder(recorder.deps),
     });
@@ -276,6 +288,12 @@ describe("weak-spot loop end to end", () => {
       insertTaskEvent: async () => {},
       insertStarter: async () => ({}) as StarterRow,
       uploadBuffer: async () => {},
+      // Billing fakes: this e2e must never reach the real usage ledger (the
+      // 0002 migration may not be applied), and a real claim would resolve
+      // the shared env cache mid-suite and break later env-pinning tests.
+      claimFeature: async () => ({ ok: true as const, usageId: "", plan: "pro" as const }),
+      consumeUsage: async () => {},
+      releaseUsage: async () => {},
       now: () => NOW,
       onDiagnosisRecorded: createDiagnosisRecorder(recorder.deps),
     });

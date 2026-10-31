@@ -235,6 +235,11 @@ async function processMessage(ctx: BotContextLike, deps: HandlerDeps, spec: Mess
       await sendMathOutcome(ctx, outcome, deps.botToken);
       return;
     }
+    if (outcome.kind === "quota") {
+      // Refused math photo: the quota text on its own, no photo, no keyboard.
+      await replySafely(ctx, outcome.text);
+      return;
+    }
 
     let text: string;
     if (outcome.kind === "tasks") {

@@ -76,6 +76,9 @@ export type IngestOutcome =
     }
   | { kind: "nothing"; clarification: string | null }
   | { kind: "math"; caption: string; annotated: Buffer | null; practiceText: string | null; extra: string | null }
+  // Math photo refused by the usage gate: no task, no diagnosis, the whole
+  // reply is the quota text.
+  | { kind: "quota"; text: string }
   // No longer produced by the default flow; kept for callers that inject no
   // starters deps or no image bytes for a math upload.
   | { kind: "math_pending" };
@@ -165,7 +168,9 @@ export async function ingestContent(deps: IngestDeps, input: IngestInput): Promi
       return { kind: "math_pending" };
     }
     // Diagnosis errors propagate on purpose: no task is written before the
-    // model call succeeds, so failing the upload here loses nothing.
+    // model call succeeds, so failing the upload here loses nothing. A quota
+    // refusal is not an error: the upload still finishes as a math photo and
+    // the whole reply is the quota text.
     const math = await runMathDiagnosis(deps.starters, {
       user: input.user,
       upload: input.upload,
@@ -173,6 +178,7 @@ export async function ingestContent(deps: IngestDeps, input: IngestInput): Promi
       caption: input.text ?? null,
     });
     await finishDone("math_working");
+    if (math.status === "blocked") return { kind: "quota", text: math.outcome.caption };
     return { kind: "math", ...math.outcome };
   }
 
@@ -245,6 +251,14 @@ async function attachStarterIfDocument(
     };
   }
   if ("skipped" in attempt) return { starter: null, created };
+  if ("blocked" in attempt) {
+    // Quota refused: the capture stays (any fallback task included), the
+    // starter is skipped and the reply carries the quota sentence verbatim.
+    if (attempt.task != null && !created.some((task) => task.id === attempt.task!.id)) {
+      created.push(attempt.task);
+    }
+    return { starter: { status: "blocked", text: attempt.blocked }, created };
+  }
 
   if (attempt.task != null && !created.some((task) => task.id === attempt.task!.id)) {
     created.push(attempt.task);

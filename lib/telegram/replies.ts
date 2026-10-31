@@ -34,10 +34,16 @@ export type SummaryOutcome = {
 };
 
 // The "I also made ..." line appended to a capture summary: one line for a
-// made starter, one plain sentence for a starter that failed. Null means say
+// made starter, one plain sentence for a starter that failed, and the quota
+// text verbatim for a starter the usage gate refused. Null means say
 // nothing extra.
 export function starterLine(starter: StarterReplyInfo | null | undefined): string | null {
   if (starter == null) return null;
+  if (starter.status === "blocked") {
+    // Fully worded by lib/billing/copy.ts, which guarantees the no-selling
+    // rules; pass it through untouched.
+    return starter.text;
+  }
   if (starter.status === "failed") {
     switch (starter.reason) {
       case "empty_checklist":

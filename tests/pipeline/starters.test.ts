@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import sharp from "sharp";
 import type { FinishUploadPatch, InsertStarterInput, InsertTaskEventInput, InsertTaskInput } from "../../lib/db/queries";
 import type { StarterRow, TaskRow, UploadRow, UserRow } from "../../lib/db/types";
+import { quotaHitReply } from "../../lib/billing/copy";
+import type { ClaimArgs } from "../../lib/billing/entitlements";
 import { BudgetExceededError } from "../../lib/meta/client";
 import type { GenerateObjectOptions, MetaClient, Usage } from "../../lib/meta/client";
 import { executeOps } from "../../lib/pipeline/execute";
@@ -19,6 +21,8 @@ import { FlashcardsTooThinError, NoStudyMaterialError } from "../../lib/starters
 import { summaryReply } from "../../lib/telegram/replies";
 
 const NOW = new Date("2026-10-28T09:00:00+08:00");
+// 1 Nov 2026 00:00 SGT, the reset instant used by the refused-claim fakes.
+const NOV_1_SGT = new Date("2026-10-31T16:00:00Z");
 const USAGE: Usage = { inputTokens: 900, outputTokens: 200, cachedTokens: 0, costUsd: 0.002, latencyMs: 700 };
 
 const user: UserRow = {
@@ -78,11 +82,17 @@ function makePurposeGenerateObject(byPurpose: Record<string, unknown | Error>) {
   return { generateObject, calls };
 }
 
-function makeStartersDeps(generateObject: MetaClient["generateObject"]) {
+function makeStartersDeps(
+  generateObject: MetaClient["generateObject"],
+  billing: { claim?: "ok" | "refuse" | "throw" } = {},
+) {
   const inserted: InsertTaskInput[] = [];
   const events: InsertTaskEventInput[] = [];
   const starters: InsertStarterInput[] = [];
   const uploads: Array<{ path: string; size: number; contentType: string }> = [];
+  const claims: ClaimArgs[] = [];
+  const consumed: string[] = [];
+  const released: string[] = [];
   let seq = 0;
   const deps: StartersDeps = {
     generateObject,
@@ -123,9 +133,30 @@ function makeStartersDeps(generateObject: MetaClient["generateObject"]) {
     uploadBuffer: async (path, buffer, contentType) => {
       uploads.push({ path, size: buffer.byteLength, contentType });
     },
+    claimFeature: async (args) => {
+      claims.push(args);
+      if (billing.claim === "refuse") {
+        return {
+          ok: false as const,
+          reason: "quota" as const,
+          used: 1,
+          limit: 1,
+          plan: "free" as const,
+          resetsAt: NOV_1_SGT,
+        };
+      }
+      if (billing.claim === "throw") throw new Error("claim_usage rpc missing");
+      return { ok: true as const, usageId: `usage-${claims.length}`, plan: "free" as const };
+    },
+    consumeUsage: async (usageId) => {
+      consumed.push(usageId);
+    },
+    releaseUsage: async (usageId) => {
+      released.push(usageId);
+    },
     now: () => NOW,
   };
-  return { deps, inserted, events, starters, uploads };
+  return { deps, inserted, events, starters, uploads, claims, consumed, released };
 }
 
 function checklistItems(count: number) {
@@ -552,12 +583,378 @@ describe("runMathDiagnosis", () => {
   });
 });
 
+describe("usage gate: document starters", () => {
+  test("brief: claims once with the upload id and feature, consumes on success, never releases", async () => {
+    const { generateObject } = makePurposeGenerateObject({ checklist: { items: checklistItems(2) } });
+    const fake = makeStartersDeps(generateObject);
+
+    const result = await attachDocumentStarter(fake.deps, {
+      user,
+      upload,
+      pdf: PDF,
+      inputKind: "assignment_brief",
+      created: [taskRow("task-a", "CS2030 Lab 4")],
+      updated: [],
+    });
+
+    expect("summary" in result).toBe(true);
+    expect(fake.claims).toEqual([
+      { userId: "user-1", feature: "brief_checklist", uploadId: "upload-1" },
+    ]);
+    expect(fake.consumed).toEqual(["usage-1"]);
+    expect(fake.released).toEqual([]);
+  });
+
+  test("slides: the claimed feature is slides_flashcards", async () => {
+    const { generateObject } = makePurposeGenerateObject({ flashcards: flashcardsData(10, 3) });
+    const fake = makeStartersDeps(generateObject);
+
+    await attachDocumentStarter(fake.deps, {
+      user,
+      upload,
+      pdf: PDF,
+      inputKind: "lecture_slides",
+      created: [taskRow("task-a", "Cell division")],
+      updated: [],
+    });
+
+    expect(fake.claims).toEqual([
+      { userId: "user-1", feature: "slides_flashcards", uploadId: "upload-1" },
+    ]);
+    expect(fake.consumed).toEqual(["usage-1"]);
+  });
+
+  test("a throwing AI call releases the claimed use and the error handling is unchanged", async () => {
+    const { generateObject } = makePurposeGenerateObject({ checklist: new Error("kaboom") });
+    const fake = makeStartersDeps(generateObject);
+
+    const result = await attachDocumentStarter(fake.deps, {
+      user,
+      upload,
+      pdf: PDF,
+      inputKind: "assignment_brief",
+      created: [taskRow("task-a", "CS2030 Lab 4")],
+      updated: [],
+    });
+
+    expect("error" in result && result.error.message).toBe("kaboom");
+    expect(fake.released).toEqual(["usage-1"]);
+    expect(fake.consumed).toEqual([]);
+  });
+
+  test("an empty checklist releases instead of consuming", async () => {
+    const { generateObject } = makePurposeGenerateObject({ checklist: { items: [] } });
+    const fake = makeStartersDeps(generateObject);
+
+    const result = await attachDocumentStarter(fake.deps, {
+      user,
+      upload,
+      pdf: PDF,
+      inputKind: "assignment_brief",
+      created: [taskRow("task-a", "CS2030 Lab 4")],
+      updated: [],
+    });
+
+    expect("error" in result && result.error instanceof EmptyChecklistError).toBe(true);
+    expect(fake.released).toEqual(["usage-1"]);
+    expect(fake.consumed).toEqual([]);
+  });
+
+  test("slides with no study material release", async () => {
+    const { generateObject } = makePurposeGenerateObject({ flashcards: { cards: [], practice: [] } });
+    const fake = makeStartersDeps(generateObject);
+
+    const result = await attachDocumentStarter(fake.deps, {
+      user,
+      upload,
+      pdf: PDF,
+      inputKind: "lecture_slides",
+      created: [taskRow("task-a", "Cell division")],
+      updated: [],
+    });
+
+    expect("error" in result && result.error instanceof NoStudyMaterialError).toBe(true);
+    expect(fake.released).toEqual(["usage-1"]);
+    expect(fake.consumed).toEqual([]);
+  });
+
+  test("too-thin flashcards release", async () => {
+    const { generateObject } = makePurposeGenerateObject({ flashcards: flashcardsData(2, 1) });
+    const fake = makeStartersDeps(generateObject);
+
+    const result = await attachDocumentStarter(fake.deps, {
+      user,
+      upload,
+      pdf: PDF,
+      inputKind: "lecture_slides",
+      created: [taskRow("task-a", "Cell division")],
+      updated: [],
+    });
+
+    expect("error" in result && result.error instanceof FlashcardsTooThinError).toBe(true);
+    expect(fake.released).toEqual(["usage-1"]);
+    expect(fake.consumed).toEqual([]);
+  });
+
+  test("quota refused brief: no AI call, no starter, the blocked text is the quota reply", async () => {
+    const { generateObject, calls } = makePurposeGenerateObject({ checklist: { items: checklistItems(2) } });
+    const fake = makeStartersDeps(generateObject, { claim: "refuse" });
+
+    const result = await attachDocumentStarter(fake.deps, {
+      user,
+      upload,
+      pdf: PDF,
+      inputKind: "assignment_brief",
+      created: [taskRow("task-a", "CS2030 Lab 4")],
+      updated: [],
+    });
+
+    expect(calls).toHaveLength(0); // the generateObject fake was never touched
+    expect(fake.starters).toHaveLength(0);
+    if (!("blocked" in result)) throw new Error("expected a blocked result");
+    expect(result.blocked).toBe(
+      quotaHitReply({ feature: "brief_checklist", limit: 1, resetsAt: NOV_1_SGT, reason: "quota" }),
+    );
+    expect(fake.consumed).toEqual([]);
+    expect(fake.released).toEqual([]);
+  });
+
+  test("quota refused slides keep the fallback Revise task they already wrote", async () => {
+    const { generateObject, calls } = makePurposeGenerateObject({ flashcards: flashcardsData(10, 3) });
+    const fake = makeStartersDeps(generateObject, { claim: "refuse" });
+
+    const result = await attachDocumentStarter(fake.deps, {
+      user,
+      upload,
+      pdf: PDF,
+      inputKind: "lecture_slides",
+      created: [],
+      updated: [],
+    });
+
+    if (!("blocked" in result)) throw new Error("expected a blocked result");
+    expect(result.task?.title).toBe("Revise: lab4 brief");
+    expect(fake.inserted).toHaveLength(1); // the task write survived the refusal
+    expect(calls).toHaveLength(0);
+    expect(fake.starters).toHaveLength(0);
+  });
+
+  test("a broken ledger (claim throws) never blocks the checklist: one log line, no settle calls", async () => {
+    const { generateObject, calls } = makePurposeGenerateObject({ checklist: { items: checklistItems(2) } });
+    const fake = makeStartersDeps(generateObject, { claim: "throw" });
+    const logs: unknown[][] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => {
+      logs.push(args);
+    };
+
+    let result: Awaited<ReturnType<typeof attachDocumentStarter>>;
+    try {
+      result = await attachDocumentStarter(fake.deps, {
+        user,
+        upload,
+        pdf: PDF,
+        inputKind: "assignment_brief",
+        created: [taskRow("task-a", "CS2030 Lab 4")],
+        updated: [],
+      });
+    } finally {
+      console.error = originalError;
+    }
+
+    expect("summary" in result).toBe(true);
+    expect(calls).toHaveLength(1); // the AI call ran anyway
+    expect(fake.consumed).toEqual([]); // no ledger row, nothing to settle
+    expect(fake.released).toEqual([]);
+    expect(logs).toHaveLength(1);
+    expect(String(logs[0]?.[0])).toContain("usage gate unavailable");
+  });
+
+  test("a throwing consume never masks the result", async () => {
+    const { generateObject } = makePurposeGenerateObject({ checklist: { items: checklistItems(2) } });
+    const fake = makeStartersDeps(generateObject);
+    fake.deps.consumeUsage = async () => {
+      throw new Error("ledger down");
+    };
+
+    const result = await attachDocumentStarter(fake.deps, {
+      user,
+      upload,
+      pdf: PDF,
+      inputKind: "assignment_brief",
+      created: [taskRow("task-a", "CS2030 Lab 4")],
+      updated: [],
+    });
+
+    expect("summary" in result && result.summary).toEqual({ type: "checklist", count: 2 });
+  });
+
+  test("a throwing release never masks the original error", async () => {
+    const { generateObject } = makePurposeGenerateObject({ checklist: new Error("kaboom") });
+    const fake = makeStartersDeps(generateObject);
+    fake.deps.releaseUsage = async () => {
+      throw new Error("ledger down");
+    };
+
+    const result = await attachDocumentStarter(fake.deps, {
+      user,
+      upload,
+      pdf: PDF,
+      inputKind: "assignment_brief",
+      created: [taskRow("task-a", "CS2030 Lab 4")],
+      updated: [],
+    });
+
+    expect("error" in result && result.error.message).toBe("kaboom");
+  });
+});
+
+describe("usage gate: math diagnosis", () => {
+  test("claims with the upload id and consumes once after a usable diagnosis", async () => {
+    const image = await tinyJpeg();
+    const { generateObject } = makePurposeGenerateObject({ math: MATH_WRONG });
+    const fake = makeStartersDeps(generateObject);
+
+    const result = await runMathDiagnosis(fake.deps, { user, upload, image, caption: "find x" });
+
+    expect(result.status).toBe("wrong");
+    expect(fake.claims).toEqual([
+      { userId: "user-1", feature: "math_diagnosis", uploadId: "upload-1" },
+    ]);
+    expect(fake.consumed).toEqual(["usage-1"]);
+    expect(fake.released).toEqual([]);
+  });
+
+  test("a correct diagnosis consumes too", async () => {
+    const image = await tinyJpeg();
+    const { generateObject } = makePurposeGenerateObject({ math: MATH_CORRECT });
+    const fake = makeStartersDeps(generateObject);
+
+    const result = await runMathDiagnosis(fake.deps, { user, upload, image, caption: null });
+
+    expect(result.status).toBe("correct");
+    expect(fake.consumed).toEqual(["usage-1"]);
+    expect(fake.released).toEqual([]);
+  });
+
+  test("an unreadable photo releases instead of consuming", async () => {
+    const image = await tinyJpeg();
+    const { generateObject } = makePurposeGenerateObject({ math: MATH_UNREADABLE });
+    const fake = makeStartersDeps(generateObject);
+
+    const result = await runMathDiagnosis(fake.deps, { user, upload, image, caption: null });
+
+    expect(result.status).toBe("unreadable");
+    expect(fake.consumed).toEqual([]);
+    expect(fake.released).toEqual(["usage-1"]);
+    expect(fake.inserted).toHaveLength(0);
+    expect(fake.starters).toHaveLength(0);
+  });
+
+  test("a failing model call releases and still propagates", async () => {
+    const image = await tinyJpeg();
+    const { generateObject } = makePurposeGenerateObject({ math: new Error("Meta API down") });
+    const fake = makeStartersDeps(generateObject);
+
+    await expect(
+      runMathDiagnosis(fake.deps, { user, upload, image, caption: null }),
+    ).rejects.toThrow("Meta API down");
+    expect(fake.consumed).toEqual([]);
+    expect(fake.released).toEqual(["usage-1"]);
+    expect(fake.inserted).toHaveLength(0);
+  });
+
+  test("quota refused: no AI call, no task, and the whole reply is the quota text", async () => {
+    const image = await tinyJpeg();
+    const { generateObject, calls } = makePurposeGenerateObject({ math: MATH_WRONG });
+    const fake = makeStartersDeps(generateObject);
+    fake.deps.claimFeature = async (args) => {
+      fake.claims.push(args);
+      return {
+        ok: false as const,
+        reason: "quota" as const,
+        used: 3,
+        limit: 3,
+        plan: "free" as const,
+        resetsAt: NOV_1_SGT,
+      };
+    };
+
+    const result = await runMathDiagnosis(fake.deps, { user, upload, image, caption: null });
+
+    expect(result.status).toBe("blocked");
+    if (result.status !== "blocked") return;
+    expect(result.outcome).toEqual({
+      caption: quotaHitReply({ feature: "math_diagnosis", limit: 3, resetsAt: NOV_1_SGT, reason: "quota" }),
+      annotated: null,
+      practiceText: null,
+      extra: null,
+    });
+    expect(calls).toHaveLength(0); // no AI call at all
+    expect(fake.inserted).toHaveLength(0); // no task either
+    expect(fake.starters).toHaveLength(0);
+    expect(fake.uploads).toHaveLength(0);
+    expect(fake.consumed).toEqual([]);
+    expect(fake.released).toEqual([]);
+  });
+
+  test("a broken ledger never blocks the diagnosis", async () => {
+    const image = await tinyJpeg();
+    const { generateObject, calls } = makePurposeGenerateObject({ math: MATH_WRONG });
+    const fake = makeStartersDeps(generateObject, { claim: "throw" });
+    const logs: unknown[][] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => {
+      logs.push(args);
+    };
+
+    let result: Awaited<ReturnType<typeof runMathDiagnosis>>;
+    try {
+      result = await runMathDiagnosis(fake.deps, { user, upload, image, caption: null });
+    } finally {
+      console.error = originalError;
+    }
+
+    expect(result.status).toBe("wrong");
+    expect(calls).toHaveLength(1);
+    expect(fake.consumed).toEqual([]);
+    expect(fake.released).toEqual([]);
+    expect(logs).toHaveLength(1);
+    expect(String(logs[0]?.[0])).toContain("usage gate unavailable");
+  });
+
+  test("a throwing consume never breaks the diagnosis reply", async () => {
+    const image = await tinyJpeg();
+    const { generateObject } = makePurposeGenerateObject({ math: MATH_WRONG });
+    const fake = makeStartersDeps(generateObject);
+    fake.deps.consumeUsage = async () => {
+      throw new Error("ledger down");
+    };
+
+    const result = await runMathDiagnosis(fake.deps, { user, upload, image, caption: null });
+
+    expect(result.status).toBe("wrong");
+    expect(fake.starters).toHaveLength(1);
+  });
+});
+
 describe("createStartersDeps", () => {
   test("onDiagnosisRecorded defaults to the real weak-spot recorder and overrides win", () => {
     const deps = createStartersDeps();
     expect(typeof deps.onDiagnosisRecorded).toBe("function");
     const custom = async () => "custom line";
     expect(createStartersDeps({ onDiagnosisRecorded: custom }).onDiagnosisRecorded).toBe(custom);
+  });
+
+  test("the usage gate defaults are wired functions, resolved lazily", () => {
+    const deps = createStartersDeps();
+    expect(typeof deps.claimFeature).toBe("function");
+    expect(typeof deps.consumeUsage).toBe("function");
+    expect(typeof deps.releaseUsage).toBe("function");
+    // Overriding one billing seam leaves the others on their defaults.
+    const consume = async () => {};
+    expect(createStartersDeps({ consumeUsage: consume }).consumeUsage).toBe(consume);
+    expect(typeof createStartersDeps({ consumeUsage: consume }).claimFeature).toBe("function");
   });
 });
 

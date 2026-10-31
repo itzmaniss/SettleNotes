@@ -8,6 +8,7 @@ import type {
   UpdateTaskPatch,
 } from "../../lib/db/queries";
 import type { TaskRow, UploadRow, UserRow } from "../../lib/db/types";
+import { quotaHitReply } from "../../lib/billing/copy";
 import type { GenerateObjectOptions, MetaClient } from "../../lib/meta/client";
 import { executeOps } from "../../lib/pipeline/execute";
 import { createIngestDeps, ingestContent, type IngestDeps, type IngestInput } from "../../lib/pipeline/ingest";
@@ -16,6 +17,8 @@ import type { UnderstandOutput } from "../../lib/pipeline/understand";
 import { summaryReply } from "../../lib/telegram/replies";
 
 const NOW = new Date("2026-10-28T09:00:00+08:00");
+// 1 Nov 2026 00:00 SGT, the reset instant used by the refused-claim fake.
+const NOV_1_SGT = new Date("2026-10-31T16:00:00Z");
 const USAGE = { inputTokens: 900, outputTokens: 200, cachedTokens: 0, costUsd: 0.002, latencyMs: 700 };
 
 const user: UserRow = {
@@ -412,6 +415,7 @@ describe("ingestContent: starter wiring end to end", () => {
 
   function makeStarterDepsFake(generateObject: MetaClient["generateObject"]) {
     const startersInserted: InsertStarterInput[] = [];
+    const claims: Array<{ userId: string; feature: string; uploadId: string | null }> = [];
     const starters: StartersDeps = {
       generateObject,
       insertTask: async () => {
@@ -430,6 +434,12 @@ describe("ingestContent: starter wiring end to end", () => {
         };
       },
       uploadBuffer: async () => {},
+      claimFeature: async (args) => {
+        claims.push(args);
+        return { ok: true as const, usageId: `usage-${claims.length}`, plan: "free" as const };
+      },
+      consumeUsage: async () => {},
+      releaseUsage: async () => {},
       now: () => NOW,
     };
     return { starters, startersInserted };
@@ -494,6 +504,58 @@ describe("ingestContent: starter wiring end to end", () => {
     expect(reply).toContain("Added 1 task:");
     expect(reply).toContain("- CS2030 Lab 4 (due Fri 6 Nov, 11:59pm)");
     expect(reply).toContain("I also made a checklist of 9 things to hand in. Tick them off on your dashboard.");
+    assertNoDashes(reply);
+  });
+
+  test("a quota-blocked brief still creates the task and the reply carries the quota sentence", async () => {
+    const calls: GenerateObjectOptions<unknown>[] = [];
+    const generateObject: MetaClient["generateObject"] = async (opts) => {
+      calls.push(opts as GenerateObjectOptions<unknown>);
+      // Only understand may run: a refused quota means no starter AI call.
+      if (opts.purpose !== "understand") {
+        throw new Error(`the ${opts.purpose} call must not run when quota is refused`);
+      }
+      return { data: BRIEF_OUTPUT as never, usage: USAGE };
+    };
+    const fakeDb = makeFakeDb([]);
+    const { starters, startersInserted } = makeStarterDepsFake(generateObject);
+    starters.claimFeature = async () => ({
+      ok: false as const,
+      reason: "quota" as const,
+      used: 1,
+      limit: 1,
+      plan: "free" as const,
+      resetsAt: NOV_1_SGT,
+    });
+    const deps: IngestDeps = {
+      ...createIngestDeps(),
+      generateObject,
+      ...fakeDb,
+      starters,
+      now: () => NOW,
+    };
+
+    const outcome = await ingestContent(
+      deps,
+      makeInput({ pdf: { base64: "JVBERi0=", filename: "lab4-brief.pdf" }, text: null }),
+    );
+
+    expect(outcome.kind).toBe("tasks");
+    if (outcome.kind !== "tasks") return;
+    expect(fakeDb.inserts).toHaveLength(1); // the capture still wrote its task
+    expect(fakeDb.inserts[0]).toMatchObject({ title: "CS2030 Lab 4", kind: "assignment" });
+    expect(calls.some((c) => c.purpose === "checklist")).toBe(false);
+    expect(startersInserted).toHaveLength(0);
+    expect(outcome.starter).toEqual({
+      status: "blocked",
+      text: quotaHitReply({ feature: "brief_checklist", limit: 1, resetsAt: NOV_1_SGT, reason: "quota" }),
+    });
+    const reply = summaryReply(outcome);
+    expect(reply).toContain("Added 1 task:");
+    expect(reply).toContain("- CS2030 Lab 4 (due Fri 6 Nov, 11:59pm)");
+    expect(reply).toContain(
+      "You've used your 1 free brief checklist for October. They reset on 1 Nov.",
+    );
     assertNoDashes(reply);
   });
 
@@ -571,6 +633,9 @@ describe("ingestContent: starter wiring end to end", () => {
       uploadBuffer: async (path, _buffer, contentType) => {
         uploaded.push({ path, contentType });
       },
+      claimFeature: async () => ({ ok: true as const, usageId: "usage-1", plan: "free" as const }),
+      consumeUsage: async () => {},
+      releaseUsage: async () => {},
       now: () => NOW,
     };
     const hookInputs: unknown[] = [];
