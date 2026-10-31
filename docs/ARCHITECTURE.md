@@ -222,7 +222,7 @@ Shared zod schemas in `lib/starters/types.ts`:
 Annotation (`lib/media/annotate.ts`): scale bbox from 0-1000 to pixel space of the exact image sent, draw a red rounded rect + "Step N" label via SVG overlay with sharp, save to Storage, send with `replyWithPhoto`.
 
 ### 4.6 Voice (`lib/media/audio.ts` + `lib/meta/transcribe.ts`)
-OGG/Opus -> ffmpeg-static -> WAV mono 16-bit 16 kHz -> `POST /v1/asr/transcribe` multipart (see `docs/meta-api/speech-to-text.md`), `languageBias: ["en"]`, `keywords`: the student's course codes from open tasks. Transcript goes into Understand as a plain message.
+OGG/Opus -> ffmpeg-static -> WAV mono 16-bit 16 kHz -> `POST /v1/asr/transcribe` multipart (see `docs/meta-api/speech-to-text.md`), `languageBias: ["English"]` (the docs want language names, not codes), `keywords`: the student's course codes from open tasks. Transcript goes into Understand as a plain message.
 
 ## 5. Security
 

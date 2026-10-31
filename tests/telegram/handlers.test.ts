@@ -4,7 +4,9 @@ import type { Context, NextFunction } from "grammy";
 import type { Chat, Message, User } from "grammy/types";
 import type { CreateUploadInput, FinishUploadPatch, UpsertUserInput } from "../../lib/db/queries";
 import type { TaskRow, UploadRow, UserRow } from "../../lib/db/types";
+import { AudioConversionError } from "../../lib/media/audio";
 import { BudgetExceededError } from "../../lib/meta/client";
+import type { TranscribeArgs, TranscribeResult } from "../../lib/meta/transcribe";
 import { FileTooLargeError } from "../../lib/telegram/files";
 import {
   allowlistMiddleware,
@@ -12,18 +14,22 @@ import {
   handleOtherMessage,
   handlePhotoMessage,
   handleTextMessage,
+  handleVoiceMessage,
   type BotContextLike,
   type HandlerDeps,
 } from "../../lib/telegram/handlers";
 import {
   budgetReply,
+  emptyTranscriptReply,
   failureReply,
   fileTooLargeReply,
+  heardPrefix,
   mathPendingReply,
   pdfTruncatedNote,
   REFUSAL_TEXT,
   unknownCommandReply,
   unsupportedFileReply,
+  voiceTooLongReply,
 } from "../../lib/telegram/replies";
 
 const NOW = new Date("2026-10-28T09:00:00+08:00");
@@ -128,6 +134,9 @@ function makeDeps(overrides: {
   fileBuffer?: Buffer;
   ingestOutcome?: Awaited<ReturnType<HandlerDeps["ingest"]>>;
   ingestError?: Error;
+  convertAudio?: NonNullable<HandlerDeps["convertAudio"]>;
+  transcribe?: NonNullable<HandlerDeps["transcribe"]>;
+  listOpenTasks?: NonNullable<HandlerDeps["listOpenTasks"]>;
 } = {}): DepsSpy {
   const uploads: CreateUploadInput[] = [];
   const finished: Array<{ id: string; patch: FinishUploadPatch }> = [];
@@ -188,6 +197,15 @@ function makeDeps(overrides: {
       });
       return `${args.userId}/${args.uploadId}/original.jpg`;
     },
+    convertAudio:
+      overrides.convertAudio ??
+      (async () => ({ wav: Buffer.from("fake-wav"), seconds: 1 })),
+    transcribe:
+      overrides.transcribe ??
+      (async (): Promise<TranscribeResult> => {
+        throw new Error("no transcriber configured in test");
+      }),
+    listOpenTasks: overrides.listOpenTasks ?? (async () => []),
     ingest: async (input) => {
       ingests.push(input as Record<string, unknown>);
       if (overrides.ingestError) throw overrides.ingestError;
@@ -463,9 +481,9 @@ describe("math pending and other message types", () => {
     expect(spy.replies.map((r) => r.text)).toEqual([mathPendingReply()]);
   });
 
-  test("voice notes and stickers get the supported-types reply for now", async () => {
+  test("stickers still get the supported-types reply", async () => {
     const spy = makeCtx({
-      voice: { file_id: "voice-1", duration: 3 },
+      sticker: { file_id: "sticker-1" },
       date: 1,
       chat: { id: 101, type: "private" },
       from: { id: 101, is_bot: false, first_name: "Tim" },
@@ -625,6 +643,203 @@ describe("quota refused math photo", () => {
     assertNoDashes(quotaText);
     // The upload was still finished by the pipeline, not marked failed.
     expect(finished[0].patch.status).toBe("done");
+  });
+});
+
+describe("voice notes", () => {
+  const TRANSCRIPT = "prof say extend lab 4 to nxt fri liao";
+  const LONG = "a".repeat(250);
+
+  function voiceMessage(duration: number): Record<string, unknown> {
+    return {
+      voice: { file_id: "voice-1", duration, mime_type: "audio/ogg" },
+      date: 1,
+      chat: { id: 101, type: "private" },
+      from: { id: 101, is_bot: false, first_name: "Tim" },
+    };
+  }
+
+  test("happy path: transcript runs through ingest as text, reply quotes what was heard", async () => {
+    const spy = makeCtx(voiceMessage(4));
+    let transcribeArgs: TranscribeArgs | undefined;
+    const { deps, uploads, finished, downloads, ingests } = makeDeps({
+      fileBuffer: Buffer.from("ogg-bytes"),
+      convertAudio: async (input) => {
+        expect(input.toString()).toBe("ogg-bytes");
+        return { wav: Buffer.from("wav-bytes"), seconds: 3.7 };
+      },
+      transcribe: async (args) => {
+        transcribeArgs = args;
+        return { text: TRANSCRIPT, seconds: 3.7, costUsd: 0.000185, latencyMs: 40 };
+      },
+      listOpenTasks: async () => [createdTask],
+    });
+
+    await handleVoiceMessage(spy.ctx, deps);
+
+    expect(downloads).toEqual(["voice-1"]);
+    expect(uploads[0]).toMatchObject({
+      kind: "voice",
+      telegramFileId: "voice-1",
+      mimeType: "audio/ogg",
+      textContent: null,
+    });
+    expect(transcribeArgs).toMatchObject({ userId: "user-1", seconds: 3.7, keywords: ["CS2030"] });
+    expect(Buffer.from(transcribeArgs!.wav).toString()).toBe("wav-bytes");
+
+    expect(ingests).toHaveLength(1);
+    const ingestInput = ingests[0] as { text?: string; image?: unknown; pdf?: unknown };
+    expect(ingestInput.text).toBe(TRANSCRIPT);
+    expect(ingestInput.image).toBeUndefined();
+    expect(ingestInput.pdf).toBeUndefined();
+
+    expect(spy.replies).toHaveLength(1);
+    expect(spy.replies[0].text).toBe(
+      `${heardPrefix(TRANSCRIPT)}\n\nAdded 1 task:\n- CS2030 Lab 4 (due Fri 6 Nov, 11:59pm)`,
+    );
+
+    // Ingest finished the row, then the handler stored the transcript on it.
+    expect(finished).toHaveLength(2);
+    expect(finished[1]).toEqual({ id: "upload-1", patch: { status: "done", textContent: TRANSCRIPT } });
+
+    expect(spy.typingCount()).toBeGreaterThanOrEqual(1);
+    const countAfter = spy.typingCount();
+    await Bun.sleep(30);
+    expect(spy.typingCount()).toBe(countAfter);
+  });
+
+  test("keywords come from the open tasks' course codes, nulls and duplicates skipped", async () => {
+    const spy = makeCtx(voiceMessage(5));
+    let keywords: string[] | undefined;
+    const { deps } = makeDeps({
+      fileBuffer: Buffer.from("ogg"),
+      transcribe: async (args) => {
+        keywords = args.keywords;
+        return { text: "hi", seconds: 1, costUsd: 0.00005, latencyMs: 5 };
+      },
+      listOpenTasks: async () => [
+        createdTask,
+        { ...createdTask, id: "task-2", course: "MA2001" },
+        { ...createdTask, id: "task-3", course: null },
+        { ...createdTask, id: "task-4", course: "CS2030" },
+      ],
+    });
+
+    await handleVoiceMessage(spy.ctx, deps);
+
+    expect(keywords).toEqual(["CS2030", "MA2001"]);
+  });
+
+  test("over 3 minutes: refused before any download or upload row", async () => {
+    const spy = makeCtx(voiceMessage(201));
+    const { deps, downloads, uploads, finished } = makeDeps();
+
+    await handleVoiceMessage(spy.ctx, deps);
+
+    expect(spy.replies.map((r) => r.text)).toEqual([voiceTooLongReply()]);
+    expect(downloads).toHaveLength(0);
+    expect(uploads).toHaveLength(0);
+    expect(finished).toHaveLength(0);
+  });
+
+  test("exactly 180 seconds is still accepted", async () => {
+    const spy = makeCtx(voiceMessage(180));
+    const { deps, downloads } = makeDeps({
+      fileBuffer: Buffer.from("ogg"),
+      transcribe: async () => ({ text: "hi", seconds: 180, costUsd: 0.009, latencyMs: 10 }),
+    });
+
+    await handleVoiceMessage(spy.ctx, deps);
+
+    expect(downloads).toEqual(["voice-1"]);
+  });
+
+  test("empty transcript: friendly retry reply, upload marked failed, ingest never runs", async () => {
+    const spy = makeCtx(voiceMessage(4));
+    const { deps, finished, ingests } = makeDeps({
+      fileBuffer: Buffer.from("ogg"),
+      transcribe: async () => ({ text: "   ", seconds: 2, costUsd: 0.0001, latencyMs: 10 }),
+    });
+
+    await handleVoiceMessage(spy.ctx, deps);
+
+    expect(spy.replies.map((r) => r.text)).toEqual([emptyTranscriptReply()]);
+    expect(ingests).toHaveLength(0);
+    expect(finished).toHaveLength(1);
+    expect(finished[0].patch.status).toBe("failed");
+    expect(finished[0].patch.error).toContain("empty");
+  });
+
+  test("budget exceeded on transcribe: budget reply, upload marked failed", async () => {
+    const spy = makeCtx(voiceMessage(4));
+    const { deps, finished } = makeDeps({
+      fileBuffer: Buffer.from("ogg"),
+      transcribe: async () => {
+        throw new BudgetExceededError(12, 10);
+      },
+    });
+
+    await handleVoiceMessage(spy.ctx, deps);
+
+    expect(spy.replies.map((r) => r.text)).toEqual([budgetReply()]);
+    expect(finished[0].patch.status).toBe("failed");
+  });
+
+  test("conversion failure: failure reply, upload marked failed", async () => {
+    const spy = makeCtx(voiceMessage(4));
+    const { deps, finished } = makeDeps({
+      fileBuffer: Buffer.from("ogg"),
+      convertAudio: async () => {
+        throw new AudioConversionError("audio conversion failed: unreadable");
+      },
+    });
+
+    await handleVoiceMessage(spy.ctx, deps);
+
+    expect(spy.replies.map((r) => r.text)).toEqual([failureReply()]);
+    expect(finished[0].patch.status).toBe("failed");
+  });
+
+  test("a failing reply never throws out of the voice handler", async () => {
+    const spy = makeCtx(voiceMessage(4));
+    const { deps } = makeDeps({ ingestError: new Error("boom") });
+    spy.ctx.reply = async () => {
+      throw new Error("telegram send failed");
+    };
+
+    await expect(handleVoiceMessage(spy.ctx, deps)).resolves.toBeUndefined();
+  });
+
+  test("audio attachments take the same flow as voice notes", async () => {
+    const spy = makeCtx({
+      audio: { file_id: "audio-1", duration: 6, mime_type: "audio/mpeg" },
+      date: 1,
+      chat: { id: 101, type: "private" },
+      from: { id: 101, is_bot: false, first_name: "Tim" },
+    });
+    const { deps, uploads, downloads } = makeDeps({
+      fileBuffer: Buffer.from("mp3-bytes"),
+      transcribe: async () => ({ text: "quiz moved to wed", seconds: 6, costUsd: 0.0003, latencyMs: 12 }),
+    });
+
+    await handleVoiceMessage(spy.ctx, deps);
+
+    expect(downloads).toEqual(["audio-1"]);
+    expect(uploads[0]).toMatchObject({ kind: "voice", telegramFileId: "audio-1", mimeType: "audio/mpeg" });
+    expect(spy.replies[0].text).toContain('I heard: "quiz moved to wed"');
+  });
+
+  test("a long transcript is quoted only up to 200 characters", async () => {
+    const spy = makeCtx(voiceMessage(4));
+    const { deps } = makeDeps({
+      fileBuffer: Buffer.from("ogg"),
+      transcribe: async () => ({ text: LONG, seconds: 10, costUsd: 0.0005, latencyMs: 10 }),
+    });
+
+    await handleVoiceMessage(spy.ctx, deps);
+
+    expect(spy.replies[0].text.startsWith(heardPrefix(LONG))).toBe(true);
+    expect(spy.replies[0].text).toContain(`"${"a".repeat(200)}..."`);
   });
 });
 

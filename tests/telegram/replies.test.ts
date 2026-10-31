@@ -5,9 +5,11 @@ import type { StarterReplyInfo } from "../../lib/pipeline/starters";
 import {
   budgetReply,
   dashboardKeyboard,
+  emptyTranscriptReply,
   failureReply,
   fileTooLargeReply,
   formatDue,
+  heardPrefix,
   mathPendingReply,
   nothingFoundReply,
   pdfTruncatedNote,
@@ -16,6 +18,7 @@ import {
   summaryReply,
   unknownCommandReply,
   unsupportedFileReply,
+  voiceTooLongReply,
 } from "../../lib/telegram/replies";
 
 function assertNoDashes(text: string): void {
@@ -318,6 +321,39 @@ describe("fixed replies", () => {
     expect(pdfTruncatedNote()).toContain("50");
     expect(budgetReply().length).toBeGreaterThan(0);
     expect(nothingFoundReply().length).toBeGreaterThan(0);
+  });
+});
+
+describe("voice replies", () => {
+  test("exact wording", () => {
+    expect(voiceTooLongReply()).toBe(
+      "That voice note is a bit long for me. Could you send one under 3 minutes?",
+    );
+    expect(emptyTranscriptReply()).toBe(
+      "I couldn't hear anything in that voice note. Could you try again a bit closer to the mic?",
+    );
+  });
+
+  test("free of em and en dashes", () => {
+    assertNoDashes(voiceTooLongReply());
+    assertNoDashes(emptyTranscriptReply());
+  });
+
+  test("heardPrefix quotes the trimmed transcript", () => {
+    expect(heardPrefix("prof say extend lab 4")).toBe('I heard: "prof say extend lab 4"');
+    expect(heardPrefix("  hi there  ")).toBe('I heard: "hi there"');
+    expect(heardPrefix("")).toBe('I heard: ""');
+  });
+
+  test("heardPrefix cuts a long transcript at 200 characters with an ellipsis", () => {
+    expect(heardPrefix("a".repeat(250))).toBe(`I heard: "${"a".repeat(200)}..."`);
+    expect(heardPrefix("b".repeat(200))).toBe(`I heard: "${"b".repeat(200)}"`);
+  });
+
+  test("the prefix joins the normal reply with a blank line", () => {
+    expect(`${heardPrefix("extend lab")}\n\nAdded 1 task:`).toBe(
+      'I heard: "extend lab"\n\nAdded 1 task:',
+    );
   });
 });
 

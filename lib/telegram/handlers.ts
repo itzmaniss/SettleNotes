@@ -1,15 +1,23 @@
 import "server-only";
 import { InputFile, type Bot, type Context, type NextFunction } from "grammy";
 import type { Chat, Message, User } from "grammy/types";
-import { createUpload, finishUpload, upsertUser } from "@/lib/db/queries";
+import { createUpload, finishUpload, listOpenTasks, upsertUser } from "@/lib/db/queries";
 import type {
   CreateUploadInput,
   FinishUploadPatch,
   UpsertUserInput,
 } from "@/lib/db/queries";
-import type { UploadKind, UploadRow, UserRow } from "@/lib/db/types";
+import type { TaskRow, UploadKind, UploadRow, UserRow } from "@/lib/db/types";
 import { env } from "@/lib/env";
 import { BudgetExceededError } from "@/lib/meta/client";
+import { AudioTooLongError, convertToWav16kMono, isVoiceTooLong } from "@/lib/media/audio";
+import {
+  courseKeywords,
+  createRealTranscriber,
+  type TranscribeArgs,
+  type TranscribeResult,
+  type Transcriber,
+} from "@/lib/meta/transcribe";
 import { inspectPdf, isSupportedMime, normalizeImage, UnsupportedMimeError } from "@/lib/media/normalize";
 import { uploadOriginal } from "@/lib/media/storage";
 import { createIngestDeps, ingestContent } from "@/lib/pipeline/ingest";
@@ -19,14 +27,17 @@ import { downloadTelegramFile, FileTooLargeError, type FileFetchDeps } from "@/l
 import {
   budgetReply,
   dashboardKeyboard,
+  emptyTranscriptReply,
   failureReply,
   fileTooLargeReply,
+  heardPrefix,
   mathPendingReply,
   nothingFoundReply,
   pdfTruncatedNote,
   summaryReply,
   unknownCommandReply,
   unsupportedFileReply,
+  voiceTooLongReply,
 } from "@/lib/telegram/replies";
 
 // Minimal structural view of a grammY context, so handler tests can pass tiny
@@ -55,11 +66,17 @@ export type HandlerDeps = {
   ingest: (input: IngestInput) => Promise<IngestOutcome>;
   botToken: string;
   appBaseUrl: string;
+  // Voice note path, all optional with lazy real defaults so tests can inject
+  // fakes and non-voice handlers never touch audio or the transcriber.
+  convertAudio?: (input: Buffer) => Promise<{ wav: Buffer; seconds: number }>;
+  transcribe?: (args: TranscribeArgs) => Promise<TranscribeResult>;
+  listOpenTasks?: (userId: string) => Promise<TaskRow[]>;
   now?: () => Date;
   typingIntervalMs?: number;
 };
 
 export function createHandlerDeps(): HandlerDeps {
+  let realTranscriber: Transcriber | undefined;
   const deps: HandlerDeps = {
     upsertUser,
     createUpload,
@@ -75,6 +92,15 @@ export function createHandlerDeps(): HandlerDeps {
     },
     get appBaseUrl() {
       return env.APP_BASE_URL;
+    },
+    convertAudio: (input) => convertToWav16kMono(input),
+    listOpenTasks,
+    get transcribe() {
+      // Built once and resolved at call time so importing handlers.ts never
+      // reads env or opens the DB.
+      realTranscriber ??= createRealTranscriber();
+      const transcriber = realTranscriber;
+      return (args: TranscribeArgs) => transcriber.transcribe(args);
     },
   };
   return deps;
@@ -94,6 +120,10 @@ export function registerIngestHandlers(bot: Bot, deps: HandlerDeps = createHandl
   bot.on("message:text", (ctx) => handleTextMessage(ctx as unknown as BotContextLike, deps));
   bot.on("message:photo", (ctx) => handlePhotoMessage(ctx as unknown as BotContextLike, deps));
   bot.on("message:document", (ctx) => handleDocumentMessage(ctx as unknown as BotContextLike, deps));
+  // Voice notes and audio files share the transcribe flow. Registered before
+  // the catch-all so they never land in handleOtherMessage.
+  bot.on("message:voice", (ctx) => handleVoiceMessage(ctx as unknown as BotContextLike, deps));
+  bot.on("message:audio", (ctx) => handleVoiceMessage(ctx as unknown as BotContextLike, deps));
   // Voice, sticker, video and anything else we cannot read yet.
   bot.on("message", (ctx) => handleOtherMessage(ctx as unknown as BotContextLike));
 }
@@ -140,6 +170,125 @@ export async function handleDocumentMessage(ctx: BotContextLike, deps: HandlerDe
     text: ctx.message?.caption ?? null,
     file: { fileId: document.file_id, mimeType: mime, filename: document.file_name ?? null },
   });
+}
+
+// Voice notes and audio files: transcribe first, then the transcript runs
+// through the same ingest flow as a text message. Not gated by the usage
+// ledger. Same guarantees as processMessage: typing while working, the upload
+// row is marked failed on any error, replies never throw out of the handler.
+export async function handleVoiceMessage(ctx: BotContextLike, deps: HandlerDeps): Promise<void> {
+  if (ctx.from === undefined) return;
+  const voice = ctx.message?.voice ?? ctx.message?.audio;
+  if (voice == null) {
+    await replySafely(ctx, failureReply());
+    return;
+  }
+  // Telegram reports the duration up front, so refuse before any download.
+  if (isVoiceTooLong(voice.duration)) {
+    await replySafely(ctx, voiceTooLongReply());
+    return;
+  }
+
+  const convert = deps.convertAudio ?? ((input: Buffer) => convertToWav16kMono(input));
+  const transcribe = deps.transcribe ?? createRealTranscriber().transcribe;
+  const listOpen = deps.listOpenTasks ?? listOpenTasks;
+
+  let upload: UploadRow | undefined;
+  let typingTimer: ReturnType<typeof setInterval> | undefined;
+  try {
+    try {
+      await ctx.replyWithChatAction("typing");
+    } catch {
+      // The typing indicator is best effort; the real work matters more.
+    }
+    typingTimer = setInterval(() => {
+      void ctx.replyWithChatAction("typing").catch(() => {});
+    }, deps.typingIntervalMs ?? DEFAULT_TYPING_INTERVAL_MS);
+
+    const user = await deps.upsertUser({
+      telegramUserId: ctx.from.id,
+      telegramChatId: ctx.chat?.id ?? ctx.from.id,
+      firstName: ctx.from.first_name ?? null,
+    });
+    upload = await deps.createUpload({
+      userId: user.id,
+      kind: "voice",
+      telegramFileId: voice.file_id,
+      mimeType: voice.mime_type ?? null,
+      textContent: null,
+    });
+
+    const { buffer } = await deps.downloadTelegramFile(voice.file_id, {
+      getFile: (fileId) => ctx.api.getFile(fileId),
+      botToken: deps.botToken,
+    } satisfies FileFetchDeps);
+
+    // Course codes from the student's open tasks bias the transcriber toward
+    // the words it is most likely to mishear.
+    const keywords = courseKeywords(await listOpen(user.id));
+    const { wav, seconds } = await convert(buffer);
+    const { text: transcript } = await transcribe({ userId: user.id, wav, seconds, keywords });
+
+    const heard = transcript.trim();
+    if (heard.length === 0) {
+      await deps.finishUpload(upload.id, {
+        status: "failed",
+        error: "voice transcript was empty",
+      });
+      await replySafely(ctx, emptyTranscriptReply());
+      return;
+    }
+
+    const outcome = await deps.ingest({ user, upload, text: transcript });
+
+    // Store what was heard on the upload row. Ingest has already finished the
+    // row as done, so this is a small best effort follow-up write; a failure
+    // here must not fail a capture that succeeded.
+    try {
+      await deps.finishUpload(upload.id, { status: "done", textContent: heard });
+    } catch (error) {
+      console.error("[telegram] failed to store voice transcript:", messageOf(error, deps.botToken));
+    }
+
+    if (outcome.kind === "math") {
+      await sendMathOutcome(ctx, { ...outcome, caption: withHeard(heard, outcome.caption) }, deps.botToken);
+      return;
+    }
+    if (outcome.kind === "quota") {
+      await replySafely(ctx, withHeard(heard, outcome.text));
+      return;
+    }
+
+    let text: string;
+    if (outcome.kind === "tasks") {
+      text = summaryReply(outcome);
+    } else if (outcome.kind === "nothing") {
+      text = outcome.clarification ?? nothingFoundReply();
+    } else {
+      text = mathPendingReply();
+    }
+    const keyboard = dashboardKeyboard(deps.appBaseUrl);
+    await replySafely(ctx, withHeard(heard, text), keyboard ? { reply_markup: keyboard } : undefined);
+  } catch (error) {
+    if (upload !== undefined) {
+      try {
+        await deps.finishUpload(upload.id, {
+          status: "failed",
+          error: shortError(error, deps.botToken),
+        });
+      } catch (finishError) {
+        console.error("[telegram] failed to mark upload failed:", messageOf(finishError, deps.botToken));
+      }
+    }
+    console.error("[telegram] voice message processing failed:", messageOf(error, deps.botToken));
+    await replySafely(ctx, failureTextFor(error));
+  } finally {
+    if (typingTimer !== undefined) clearInterval(typingTimer);
+  }
+}
+
+function withHeard(heard: string, text: string): string {
+  return `${heardPrefix(heard)}\n\n${text}`;
 }
 
 export async function handleOtherMessage(ctx: BotContextLike): Promise<void> {
@@ -314,6 +463,8 @@ function failureTextFor(error: unknown): string {
   if (error instanceof FileTooLargeError) return fileTooLargeReply();
   if (error instanceof UnsupportedMimeError) return unsupportedFileReply();
   if (error instanceof BudgetExceededError) return budgetReply();
+  // Only ever raised on the voice path, where the student-facing copy fits.
+  if (error instanceof AudioTooLongError) return voiceTooLongReply();
   return failureReply();
 }
 

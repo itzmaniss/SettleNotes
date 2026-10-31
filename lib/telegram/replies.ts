@@ -144,6 +144,25 @@ export function pdfTruncatedNote(): string {
   return "Note: that PDF has more than 50 pages, so I only read the first 50.";
 }
 
+export function voiceTooLongReply(): string {
+  return "That voice note is a bit long for me. Could you send one under 3 minutes?";
+}
+
+export function emptyTranscriptReply(): string {
+  return "I couldn't hear anything in that voice note. Could you try again a bit closer to the mic?";
+}
+
+const HEARD_PREFIX_MAX_CHARS = 200;
+
+// Quotes back what Settle heard, trimmed so the quote stays short. The voice
+// handler joins this with a blank line and the normal reply text.
+export function heardPrefix(transcript: string): string {
+  const heard = transcript.trim();
+  const quoted =
+    heard.length > HEARD_PREFIX_MAX_CHARS ? `${heard.slice(0, HEARD_PREFIX_MAX_CHARS)}...` : heard;
+  return `I heard: "${quoted}"`;
+}
+
 const DASHBOARD_PATH = "/dashboard";
 
 /**
