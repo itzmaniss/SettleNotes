@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Chunk, Sticker } from "@/components/settle";
+import { LegalLinks } from "@/components/legal/legal-links";
 import { TelegramLoginButton } from "@/components/auth/telegram-login-button";
 import { getSessionUser } from "@/lib/auth/session";
 import { POST_LOGIN_PATH } from "@/lib/auth/paths";
@@ -60,6 +61,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         >
           {LOGIN_PAGE_BOT_LINE}
         </p>
+        <LegalLinks className="mt-4 justify-center" />
       </Chunk>
     </main>
   );

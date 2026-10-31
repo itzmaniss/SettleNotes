@@ -12,11 +12,11 @@ import {
   listWeakSpotsForUser,
 } from "@/lib/db/dashboard-queries";
 import { groupForDashboard, pickNextUp } from "@/lib/dashboard/next-up";
-import { buildPlanView, type PlanView } from "@/lib/dashboard/plan";
+import { buildPlanView, lockState, type PlanView } from "@/lib/dashboard/plan";
 import { studyDeckSummary } from "@/lib/dashboard/study-decks";
 import { Eyebrow } from "@/components/dashboard/eyebrow";
 import { NextUpCard, NextUpEmpty } from "@/components/dashboard/next-up-card";
-import { PlanCard } from "@/components/dashboard/plan-card";
+import { PlanCard, LockBanner } from "@/components/dashboard/plan-card";
 import { TaskRowCard } from "@/components/dashboard/task-row";
 import { QuickStudy } from "@/components/dashboard/quick-study";
 import { WeakSpotsPanel } from "@/components/dashboard/weak-spots-panel";
@@ -76,6 +76,9 @@ export default async function DashboardPage() {
       planView = null;
     }
   }
+  // Only a Free plan can exhaust a limit, so Pro and billing-off (where the
+  // whole plan block is skipped) never see this banner.
+  const lock = planView != null ? lockState(planView) : null;
 
   return (
     <div className="pt-4">
@@ -139,7 +142,8 @@ export default async function DashboardPage() {
           {planView != null && (
             <section aria-labelledby="plan-heading">
               <Eyebrow id="plan-heading">Plan</Eyebrow>
-              <div className="mt-3">
+              <div className="mt-3 space-y-3">
+                {lock != null && <LockBanner state={lock} billingOpen={billingOpen} />}
                 <PlanCard view={planView} billingOpen={billingOpen} />
               </div>
             </section>

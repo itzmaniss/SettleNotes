@@ -22,11 +22,16 @@ import { inspectPdf, isSupportedMime, InvalidPdfError, normalizeImage, Unsupport
 import { uploadOriginal } from "@/lib/media/storage";
 import { createIngestDeps, ingestContent } from "@/lib/pipeline/ingest";
 import type { IngestInput, IngestOutcome, PendingPrompt } from "@/lib/pipeline/ingest";
-import { isAllowedUser } from "@/lib/telegram/guards";
-import { countRecentUploads, createRateLimiter, type RateLimitCheck } from "@/lib/telegram/limits";
+import { isAccessAllowed, type AccessPolicy } from "@/lib/telegram/access";
+import {
+  countRecentUploads,
+  createRateLimiter,
+  type RateLimitCheck,
+} from "@/lib/telegram/limits";
 import { downloadTelegramFile, FileTooLargeError, type FileFetchDeps } from "@/lib/telegram/files";
 import {
   budgetReply,
+  dailyCapReply,
   dashboardKeyboard,
   emptyTranscriptReply,
   failureReply,
@@ -336,7 +341,12 @@ async function passRateLimit(ctx: BotContextLike, deps: HandlerDeps, userId: str
   try {
     const verdict = await check(userId);
     if (verdict.allowed) return true;
-    await replySafely(ctx, rateLimitReply(verdict.retryAfterSeconds));
+    // Minute limit gets the short retry line, the daily cap the pause-for-
+    // today one. Fail open exactly like the minute check on lookup errors.
+    await replySafely(
+      ctx,
+      verdict.window === "day" ? dailyCapReply() : rateLimitReply(verdict.retryAfterSeconds),
+    );
     return false;
   } catch (error) {
     console.error(
@@ -549,10 +559,13 @@ function shortError(error: unknown, botToken: string): string {
 }
 
 /**
- * First middleware on the bot: anyone outside ALLOWED_TELEGRAM_IDS gets the
+ * First middleware on the bot: anyone the access policy refuses gets the
  * refusal reply once and never reaches the handlers. Needed because
  * scripts/poll.ts runs this bot without the webhook route's guards, and any
- * stranger finding the dev bot could otherwise spend Meta credits.
+ * stranger finding the dev bot could otherwise spend Meta credits. The policy
+ * comes from lib/telegram/access.getAccessPolicy (a bare id list is also
+ * accepted), so flipping ALLOWLIST_ENABLED changes polling and the webhook
+ * the same way.
  *
  * answerPreCheckout (optional) covers the payment case: a pre_checkout_query
  * has no chat to refuse in, and leaving it unanswered would hang the payer's
@@ -560,14 +573,14 @@ function shortError(error: unknown, botToken: string): string {
  * answered false with a friendly message instead.
  */
 export function allowlistMiddleware(
-  allowed: number[],
+  access: AccessPolicy | number[],
   refuse: (chatId: number) => Promise<unknown>,
   answerPreCheckout?: (queryId: string) => Promise<unknown>,
 ) {
   return async (ctx: Context, next: NextFunction): Promise<void> => {
     const senderId = ctx.from?.id;
     if (senderId === undefined) return; // no sender to allowlist: ignore
-    if (isAllowedUser(senderId, allowed)) return next();
+    if (isAccessAllowed(senderId, access)) return next();
     if (ctx.preCheckoutQuery !== undefined) {
       if (answerPreCheckout !== undefined) await answerPreCheckout(ctx.preCheckoutQuery.id);
       return;

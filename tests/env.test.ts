@@ -49,6 +49,28 @@ describe("parseEnv", () => {
     expect(() => parseEnv({ ...requiredOnly, BILLING_ENABLED: "yes" })).toThrow("BILLING_ENABLED");
   });
 
+  test("ALLOWLIST_ENABLED defaults to true and accepts the common spellings", () => {
+    expect(parseEnv(requiredOnly).ALLOWLIST_ENABLED).toBe(true);
+    expect(parseEnv({ ...requiredOnly, ALLOWLIST_ENABLED: "" }).ALLOWLIST_ENABLED).toBe(true);
+    for (const truthy of ["true", "1", "yes", "YES", " True "]) {
+      expect(parseEnv({ ...requiredOnly, ALLOWLIST_ENABLED: truthy }).ALLOWLIST_ENABLED).toBe(true);
+    }
+    for (const falsy of ["false", "0", "no", "No", " FALSE "]) {
+      expect(parseEnv({ ...requiredOnly, ALLOWLIST_ENABLED: falsy }).ALLOWLIST_ENABLED).toBe(false);
+    }
+  });
+
+  test("ALLOWLIST_ENABLED rejects anything else with a clear message", () => {
+    let message = "";
+    try {
+      parseEnv({ ...requiredOnly, ALLOWLIST_ENABLED: "off" });
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toContain("ALLOWLIST_ENABLED");
+    expect(message).toContain("must be one of true, 1, yes, false, 0, no");
+  });
+
   test("Stripe variables are optional and blank counts as missing", () => {
     const withoutStripe = parseEnv(requiredOnly);
     expect(withoutStripe.STRIPE_SECRET_KEY).toBeUndefined();

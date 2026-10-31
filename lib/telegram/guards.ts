@@ -1,6 +1,7 @@
 import "server-only";
 import { timingSafeEqual } from "node:crypto";
 import type { Update } from "grammy/types";
+import { isAccessAllowed, type AccessPolicy } from "@/lib/telegram/access";
 
 /**
  * All webhook logic lives here so the route file stays a thin wrapper:
@@ -9,7 +10,11 @@ import type { Update } from "grammy/types";
  */
 export type WebhookDeps = {
   webhookSecret: string;
-  allowedIds: number[];
+  /**
+   * Access policy from lib/telegram/access.getAccessPolicy (a bare id list is
+   * also accepted). Decides allowlist vs open mode for every update.
+   */
+  access: AccessPolicy | number[];
   markUpdateSeen: (updateId: number) => Promise<boolean>;
   /** Real impl is `after` from "next/server"; tests collect and run manually. */
   schedule: (fn: () => Promise<unknown>) => void;
@@ -98,11 +103,12 @@ export async function handleWebhook(
 
   const senderId = senderIdOf(update);
   if (senderId === undefined) {
-    // No user to allowlist (e.g. channel post): ack and ignore.
+    // No user to admit or refuse (e.g. channel post): ack and ignore, even in
+    // open mode.
     return new Response("OK", { status: 200 });
   }
 
-  if (!isAllowedUser(senderId, deps.allowedIds)) {
+  if (!isAccessAllowed(senderId, deps.access)) {
     if (update.pre_checkout_query !== undefined) {
       // Answered inline and before the 200 so the payer's checkout never
       // hangs out the full 10 seconds.

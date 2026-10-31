@@ -17,6 +17,22 @@ describe("Dockerfile", () => {
     expect(dockerfile).toContain("ENV NEXT_OUTPUT=standalone");
   });
 
+  test("builder strips the traced typescript package after the build", () => {
+    const afterBuild = dockerfile.slice(dockerfile.indexOf("RUN bun run build"));
+    const runnerStart = afterBuild.indexOf("FROM node:22-alpine");
+    const builderTail = afterBuild.slice(0, runnerStart);
+    expect(builderTail).toMatch(/rm -rf \.next\/standalone\/node_modules\/typescript/);
+  });
+
+  test("runner stage runs only the addgroup and the sourcemap delete", () => {
+    const runnerStart = lines.findIndex((line) => line.trim().startsWith("FROM node:22-alpine"));
+    const runner = lines.slice(runnerStart).filter((line) => line.trim().startsWith("RUN "));
+    expect(runner.length).toBe(2);
+    expect(runner.join("\n")).toMatch(/addgroup/);
+    expect(runner.join("\n")).toMatch(/find .*-name "\*\.map" .*-delete/);
+    expect(runner.join("\n")).not.toContain("rm -rf");
+  });
+
   test("final stage copies only the standalone output, static assets and public", () => {
     const runnerStart = lines.findIndex((line) => line.trim().startsWith("FROM node:22-alpine"));
     const runner = lines.slice(runnerStart);

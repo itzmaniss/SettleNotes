@@ -87,6 +87,7 @@ describe("error paths reach the student as friendly copy and mark the upload fai
 // called with plain sample values.
 const SAMPLES: Record<string, string> = {
   rateLimitReply: replies.rateLimitReply(60),
+  dailyCapReply: replies.dailyCapReply(),
   tasksEmptyReply: replies.tasksEmptyReply(),
   tasksMoreLine: replies.tasksMoreLine(2),
   tasksNextHint: replies.tasksNextHint(),

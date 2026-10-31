@@ -33,7 +33,7 @@ function makeDeps(overrides: Partial<TelegramLoginDeps> = {}): FakeDeps {
     sessionCalls,
     deps: {
       botToken: BOT_TOKEN,
-      allowedIds: [900000001],
+      access: [900000001],
       getUserByTelegramId: async () => null,
       upsertUser: async (input) => {
         upsertCalls.push(input);
@@ -115,7 +115,7 @@ describe("handleTelegramLogin (app/auth/telegram GET logic)", () => {
   });
 
   test("a stranger is redirected to the not invited banner with no cookie", async () => {
-    const ctx = makeDeps({ allowedIds: [111111111] });
+    const ctx = makeDeps({ access: [111111111] });
 
     const res = await handleTelegramLogin(loginRequest(signedSearch()), ctx.deps);
 

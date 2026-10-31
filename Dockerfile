@@ -16,6 +16,11 @@ ENV NEXT_OUTPUT=standalone
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN bun run build
 
+# next build traces the TypeScript compiler into the standalone node_modules
+# because the build reads typed config files. The runtime never compiles
+# TypeScript, so drop it here instead of carrying about 9 MB of dead weight.
+RUN rm -rf .next/standalone/node_modules/typescript
+
 # Runtime: node on musl, no package manager runs, only the built output.
 FROM node:22-alpine AS runner
 WORKDIR /app

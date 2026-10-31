@@ -181,6 +181,12 @@ export function rateLimitReply(retryAfterSeconds: number): string {
   return `I can only take about ${RATE_LIMIT.max} things a minute, so give me ${wait} and send that again.`;
 }
 
+// Daily cap: no numbers on purpose. The cap lives in limits.ts, and what the
+// student needs to know is that the day is done and nothing was lost.
+export function dailyCapReply(): string {
+  return "That is a lot for one day, so I am pausing for today. Everything you have sent is saved. Try again tomorrow.";
+}
+
 export function tasksEmptyReply(): string {
   return "You have nothing open. Nice.";
 }

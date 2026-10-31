@@ -2,6 +2,7 @@ import { after } from "next/server";
 import { env } from "@/lib/env";
 import { markUpdateSeen } from "@/lib/db/queries";
 import { ensureBotReady } from "@/lib/telegram/bot";
+import { getAccessPolicy } from "@/lib/telegram/access";
 import { handleWebhook } from "@/lib/telegram/guards";
 import { PRE_CHECKOUT_CLOSED_REPLY } from "@/lib/telegram/replies";
 
@@ -14,7 +15,7 @@ const REFUSAL_TEXT =
 export async function POST(req: Request): Promise<Response> {
   return handleWebhook(req, {
     webhookSecret: env.TELEGRAM_WEBHOOK_SECRET,
-    allowedIds: env.ALLOWED_TELEGRAM_IDS,
+    access: getAccessPolicy(),
     markUpdateSeen,
     schedule: (fn) => {
       after(fn);

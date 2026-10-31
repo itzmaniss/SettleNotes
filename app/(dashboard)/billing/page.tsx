@@ -7,6 +7,7 @@ import { getLatestSubscription } from "@/lib/billing/subscriptions";
 import { env } from "@/lib/env";
 import { buildBillingPageView } from "@/lib/billing/view";
 import { BillingPanel } from "@/components/billing/billing-panel";
+import { LegalLinks } from "@/components/legal/legal-links";
 import { openPortal, startCheckout } from "./actions";
 
 export const metadata: Metadata = {
@@ -81,6 +82,11 @@ export default async function BillingPage({
   });
 
   return (
-    <BillingPanel view={view} startCheckout={startCheckout} openPortal={openPortal} />
+    <>
+      <BillingPanel view={view} startCheckout={startCheckout} openPortal={openPortal} />
+      <footer className="mx-auto w-full max-w-2xl px-4 pb-12">
+        <LegalLinks />
+      </footer>
+    </>
   );
 }

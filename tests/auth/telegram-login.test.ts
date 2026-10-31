@@ -66,7 +66,7 @@ function makeDeps(overrides: Partial<Deps> = {}, existing: { id: string; telegra
     lookupCalls,
     deps: {
       botToken: BOT_TOKEN,
-      allowedIds: [900000001, 900000002],
+      access: [900000001, 900000002],
       getUserByTelegramId: async (telegramUserId) => {
         lookupCalls.push(telegramUserId);
         return existing;
@@ -263,7 +263,7 @@ describe("completeTelegramLogin", () => {
 
   test("stranger is denied and nothing is written or looked up", async () => {
     const ctx = makeDeps({}, { id: "user-1", telegramChatId: 555000 });
-    ctx.deps.allowedIds = [111111111];
+    ctx.deps.access = [111111111];
 
     const outcome = await completeTelegramLogin(ctx.deps, widgetParams(FULL_FIELDS));
 
@@ -275,7 +275,7 @@ describe("completeTelegramLogin", () => {
 
   test("an empty allowlist admits nobody", async () => {
     const ctx = makeDeps();
-    ctx.deps.allowedIds = [];
+    ctx.deps.access = [];
 
     const outcome = await completeTelegramLogin(ctx.deps, widgetParams(MINIMAL_FIELDS));
 
@@ -287,7 +287,7 @@ describe("completeTelegramLogin", () => {
     const ctx = makeDeps();
     // The allowed user is 900000002 (username weitan); the visitor reuses that
     // username from a stranger id. Identity is the id alone, so denied.
-    ctx.deps.allowedIds = [900000002];
+    ctx.deps.access = [900000002];
     const stranger = {
       id: "999999999",
       first_name: "Wei",

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { rateLimitReply } from "../../lib/telegram/replies";
+import { dailyCapReply, rateLimitReply } from "../../lib/telegram/replies";
 import { handleDocumentMessage, handlePhotoMessage, handleTextMessage, handleVoiceMessage } from "../../lib/telegram/handlers";
 import { makeCtx, makeDeps } from "./helpers";
 
@@ -143,6 +143,34 @@ describe("rate limit gate on ingesting handlers", () => {
 
     await expect(handleTextMessage(spy.ctx, deps)).resolves.toBeUndefined();
     expect(uploads).toHaveLength(0);
+  });
+
+  test("the daily cap gets its own pause-for-today reply, not the minute one", async () => {
+    const spy = makeCtx({ text: "hi", date: 1, chat: { id: 101, type: "private" }, from: { id: 101, is_bot: false, first_name: "Tim" } });
+    const { deps, uploads, ingests } = makeDeps({
+      checkRateLimit: async () => ({
+        allowed: false as const,
+        retryAfterSeconds: 86400,
+        window: "day" as const,
+      }),
+    });
+
+    await handleTextMessage(spy.ctx, deps);
+
+    expect(spy.replies.map((r) => r.text)).toEqual([dailyCapReply()]);
+    expect(uploads).toHaveLength(0);
+    expect(ingests).toHaveLength(0);
+    // Same guarantees as the minute limit: nothing stored, nothing downloaded.
+    expect(uploads).toHaveLength(0);
+  });
+
+  test("the daily cap reply names no numbers and no dashes", () => {
+    const text = dailyCapReply();
+    expect(text).toBe(
+      "That is a lot for one day, so I am pausing for today. Everything you have sent is saved. Try again tomorrow.",
+    );
+    expect(text).not.toMatch(/[\u2013\u2014]/);
+    expect(text).not.toMatch(/\d/);
   });
 
   test("unknown commands stay exempt from the rate limit", async () => {

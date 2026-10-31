@@ -37,6 +37,24 @@ const positiveNumber = z.preprocess(
   z.number().finite().positive()
 );
 
+// Optional boolean for the allowlist switch. The common spellings are
+// accepted; anything else fails validation loudly so a typo can never
+// silently open or close the bot.
+const allowlistEnabled = z
+  .string()
+  .transform((value, ctx): boolean => {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "false" || normalized === "0" || normalized === "no") return false;
+    if (normalized === "true" || normalized === "1" || normalized === "yes") return true;
+    ctx.addIssue({
+      code: "custom",
+      input: value,
+      message: "must be one of true, 1, yes, false, 0, no",
+    });
+    return z.NEVER;
+  })
+  .default(true);
+
 const envSchema = z.object({
   TELEGRAM_BOT_TOKEN: requiredString,
   TELEGRAM_BOT_USERNAME: requiredString,
@@ -57,6 +75,9 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  // Launch switch: false opens the bot to everyone, but only while billing is
+  // on (lib/telegram/access.ts enforces that pairing).
+  ALLOWLIST_ENABLED: allowlistEnabled,
   // Stripe (web payments). All optional: a deploy without them starts fine
   // and /billing simply shows that paid plans are not open yet.
   STRIPE_SECRET_KEY: z.string().optional(),
@@ -80,6 +101,11 @@ function normalize(raw: Record<string, string | undefined>) {
 }
 
 function describeIssue(issue: z.core.$ZodIssue): string {
+  // Custom transformer messages are already human wording; they must not be
+  // swallowed by the missing-value check below. The custom code exists at
+  // runtime but is not part of the union's discriminant type.
+  const code = issue.code as string | undefined;
+  if (code === "custom" && "message" in issue) return issue.message;
   if (issue.input === undefined) return "missing";
   switch (issue.code) {
     case "invalid_type":

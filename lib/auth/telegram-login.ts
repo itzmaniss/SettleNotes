@@ -10,7 +10,7 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "@/lib/env";
 import { upsertUser, type UpsertUserInput } from "@/lib/db/queries";
 import { getUserByTelegramId } from "@/lib/clarify/queries";
-import { isAllowedUser } from "@/lib/telegram/guards";
+import { getAccessPolicy, isAccessAllowed, type AccessPolicy } from "@/lib/telegram/access";
 import { POST_LOGIN_PATH } from "./paths";
 import { createSessionToken, serializeSessionCookie } from "./session";
 
@@ -190,7 +190,8 @@ export function loginErrorBanner(error: unknown): string | null {
 
 export type TelegramLoginDeps = {
   botToken: string;
-  allowedIds: number[];
+  /** Access policy from lib/telegram/access.getAccessPolicy (bare id list ok). */
+  access: AccessPolicy | number[];
   /** Real impl resolves to lib/clarify/queries.getUserByTelegramId. */
   getUserByTelegramId: (
     telegramUserId: number,
@@ -214,10 +215,11 @@ export async function completeTelegramLogin(
   const verified = verifyTelegramLogin(params, deps.botToken, deps.now);
   if (!verified.ok) return { kind: "invalid" };
 
-  // Same invite gate as the bot (lib/telegram/guards.isAllowedUser). The
-  // allowlist is keyed on the numeric Telegram user id, so a stranger cannot
-  // create an account by logging in from the web.
-  if (!isAllowedUser(verified.user.id, deps.allowedIds)) return { kind: "denied" };
+  // Same access policy as the bot (lib/telegram/access). Open mode admits any
+  // verified login; otherwise the numeric Telegram id must be on the list, so
+  // a stranger cannot create an account by logging in from the web. The hash
+  // check above always runs first, in both modes.
+  if (!isAccessAllowed(verified.user.id, deps.access)) return { kind: "denied" };
 
   const existing = await deps.getUserByTelegramId(verified.user.id);
   // A private chat id equals the Telegram user id, so a web first account uses
@@ -285,8 +287,8 @@ export function realTelegramLoginDeps(): TelegramLoginDeps {
     get botToken() {
       return env.TELEGRAM_BOT_TOKEN;
     },
-    get allowedIds() {
-      return env.ALLOWED_TELEGRAM_IDS;
+    get access() {
+      return getAccessPolicy();
     },
     get getUserByTelegramId() {
       return async (telegramUserId: number) => {

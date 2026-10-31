@@ -9,6 +9,7 @@ import {
 } from "@/lib/telegram/commands";
 import { upsertUser } from "@/lib/db/queries";
 import { createPendingActionCallback, type CallbackContextLike } from "@/lib/telegram/callbacks";
+import { getAccessPolicy } from "@/lib/telegram/access";
 import { allowlistMiddleware, registerIngestHandlers } from "@/lib/telegram/handlers";
 import { registerPaymentHandlers } from "@/lib/telegram/payments";
 import { PRE_CHECKOUT_CLOSED_REPLY, REFUSAL_TEXT } from "@/lib/telegram/replies";
@@ -43,10 +44,12 @@ export function ensureBotReady(): Promise<Bot> {
 function createBot(): Bot {
   const bot = new Bot(env.TELEGRAM_BOT_TOKEN);
   // Very first middleware: the poll script runs this bot without the webhook
-  // route's guards, so the allowlist has to live on the bot itself.
+  // route's guards, so the access policy has to live on the bot itself. Read
+  // at bot creation, not at import, so env is only needed once polling or
+  // handling actually starts.
   bot.use(
     allowlistMiddleware(
-      env.ALLOWED_TELEGRAM_IDS,
+      getAccessPolicy(),
       (chatId) => bot.api.sendMessage(chatId, REFUSAL_TEXT),
       // A stranger's checkout must still be answered, or Telegram spins for
       // ten seconds and then fails it with a generic error.

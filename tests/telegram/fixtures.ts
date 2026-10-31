@@ -72,7 +72,7 @@ export function makeDeps(
   const refusals: number[] = [];
   const deps: WebhookDeps = {
     webhookSecret: SECRET,
-    allowedIds: [ALLOWED_ID],
+    access: [ALLOWED_ID],
     markUpdateSeen: async (updateId) => {
       seen.push(updateId);
       const first = !seenIds.has(updateId);

@@ -1,4 +1,5 @@
 import { botLink } from "./links";
+import { LegalLinks } from "@/components/legal/legal-links";
 
 export function Footer() {
   const botHref = botLink();
@@ -10,30 +11,33 @@ export function Footer() {
         </span>{" "}
         · made in Singapore
       </p>
-      <nav aria-label="Footer" className="flex flex-wrap gap-x-5">
-        <a
-          href="#how"
-          className="inline-flex items-center py-3 underline-offset-4 hover:underline sm:py-0"
-        >
-          How it works
-        </a>
-        <a
-          href="#pricing"
-          className="inline-flex items-center py-3 underline-offset-4 hover:underline sm:py-0"
-        >
-          Pricing
-        </a>
-        {botHref !== null && (
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-6">
+        <nav aria-label="Footer" className="flex flex-wrap gap-x-5">
           <a
-            href={botHref}
-            target="_blank"
-            rel="noopener noreferrer"
+            href="#how"
             className="inline-flex items-center py-3 underline-offset-4 hover:underline sm:py-0"
           >
-            Open in Telegram
+            How it works
           </a>
-        )}
-      </nav>
+          <a
+            href="#pricing"
+            className="inline-flex items-center py-3 underline-offset-4 hover:underline sm:py-0"
+          >
+            Pricing
+          </a>
+          {botHref !== null && (
+            <a
+              href={botHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center py-3 underline-offset-4 hover:underline sm:py-0"
+            >
+              Open in Telegram
+            </a>
+          )}
+        </nav>
+        <LegalLinks />
+      </div>
     </footer>
   );
 }

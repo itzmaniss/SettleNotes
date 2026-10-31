@@ -21,6 +21,7 @@ All configuration is runtime env, read from one file. Nothing secret goes into t
 | TELEGRAM_BOT_USERNAME | yes | Bot username without the @, used for the dashboard links. |
 | TELEGRAM_WEBHOOK_SECRET | yes | Random string Telegram echoes back on every webhook call. Generate with `openssl rand -hex 32`. |
 | ALLOWED_TELEGRAM_IDS | yes | Comma-separated numeric Telegram user IDs allowed to use the bot. Keep the allowlist on until launch. |
+| ALLOWLIST_ENABLED | no | Set `false` only at the launch switch to open the bot to everyone. Ignored (the allowlist stays on) while `BILLING_ENABLED` is `false`. |
 | MODEL_API_KEY | yes | Meta Model API key from dev.meta.ai. |
 | META_API_BASE_URL | no | Meta API base URL, defaults to `https://api.meta.ai/v1`. |
 | META_MODEL | no | Defaults to `muse-spark-1.3`. |

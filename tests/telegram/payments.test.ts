@@ -500,7 +500,7 @@ function makeWebhookSpyDeps(
   const answered: string[] = [];
   const deps = {
     webhookSecret: SECRET,
-    allowedIds: [ALLOWED_ID],
+    access: [ALLOWED_ID],
     markUpdateSeen: async () => true,
     schedule: (fn: () => Promise<unknown>) => {
       void fn();

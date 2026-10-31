@@ -71,3 +71,39 @@ export function usageLine(row: PlanUsageRow): string {
   if (row.limit === "unlimited") return `${row.used} used`;
   return `${row.used} of ${row.limit}`;
 }
+
+// Plain feature names for the lock banner sentence. Kept out of METERED_ROWS
+// so buildPlanView's row shape (unit tested with toEqual) never changes.
+const LOCK_FEATURE_NAMES: Record<MeteredFeature, string> = {
+  math_diagnosis: "math checks",
+  slides_flashcards: "slide decks",
+  brief_checklist: "brief checklists",
+};
+
+export type LockState = {
+  /** Plain names of every metered feature whose limit is used up. */
+  features: string[];
+  resetsOn: string;
+  /** The whole banner sentence, human wording, no numbers beyond the date. */
+  sentence: string;
+};
+
+// Pure: which metered features a Free plan has used up this month and when
+// they come back. Null when nothing is exhausted, so callers render nothing.
+// Unlimited rows (any Pro plan) can never be exhausted by construction.
+export function lockState(view: PlanView): LockState | null {
+  const exhausted = view.rows.filter(
+    (row) => row.limit !== "unlimited" && row.used >= row.limit,
+  );
+  if (exhausted.length === 0) return null;
+  const features = exhausted.map((row) => LOCK_FEATURE_NAMES[row.feature]);
+  const names =
+    features.length === 1
+      ? features[0]!
+      : `${features.slice(0, -1).join(", ")} and ${features[features.length - 1]!}`;
+  return {
+    features,
+    resetsOn: view.resetsOn,
+    sentence: `You have used all your free ${names} this month. They reset on ${view.resetsOn}.`,
+  };
+}

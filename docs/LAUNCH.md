@@ -1,0 +1,176 @@
+# Launch runbook: opening Settle to the public
+
+Every step carries one OWNER tag: **[User]** means only the account owner can do it (passwords, dashboards, real money), **[Manager]** means the person running this runbook. Steps are in order. Do them top to bottom, tick as you go. The general server work is documented once in `docs/DEPLOY.md`; this file does not repeat it.
+
+Rule zero, the reason the order below matters: with `BILLING_ENABLED=false` every user counts as Pro with unlimited AI at the owner's cost. The bot only opens to everyone while billing is ON. Never flip `ALLOWLIST_ENABLED=false` while `BILLING_ENABLED` is not `true`.
+
+## 1. Preconditions (before touching any server)
+
+- [ ] **[Manager]** The whole gate is green on the commit being deployed:
+
+```
+bun run typecheck && bun run lint && bun test && bun run build
+```
+
+- [ ] **[Manager]** Run the smoke script against the staging URL (or the running container) and expect zero FAIL:
+
+```
+bun run scripts/smoke.ts https://staging.example.com
+```
+
+- [ ] **[Manager]** Run the stats script once and confirm it prints numbers instead of an error (it is read only, safe on production):
+
+```
+bun run scripts/stats.ts --days 7
+```
+
+## 2. Infrastructure
+
+Follow `docs/DEPLOY.md` sections "What you need", "Environment variables", "The env file", "DNS, firewall, first deploy". Summary of what must exist, in this order:
+
+- [ ] **[User]** A VPS the owner controls, Docker plus the compose plugin installed.
+- [ ] **[User]** The domain, with an A record pointing at the server IP.
+- [ ] **[Manager]** Caddy running in front for https (compose file in `deploy/`).
+- [ ] **[Manager]** The env file on the server (path `/opt/settle.env` in the compose file), every variable filled, then `chmod 600`. Variable names and where each value comes from:
+
+| Name | Owner | Where it comes from |
+| --- | --- | --- |
+| TELEGRAM_BOT_TOKEN | User | @BotFather, the bot's token. |
+| TELEGRAM_BOT_USERNAME | User | The bot username without the @. |
+| TELEGRAM_WEBHOOK_SECRET | Manager | `openssl rand -hex 32`. |
+| ALLOWED_TELEGRAM_IDS | User | The owner's and testers' Telegram numeric ids (@userinfobot). |
+| ALLOWLIST_ENABLED | Manager | Leave `true` until step 7. |
+| MODEL_API_KEY | User | dev.meta.ai, API keys. |
+| META_API_BASE_URL | Manager | Default `https://api.meta.ai/v1`, leave as is. |
+| META_MODEL | Manager | Default `muse-spark-1.3`, leave as is. |
+| META_TRANSCRIBE_MODEL | Manager | Default `muse-voice-transcribe-1.0`, leave as is. |
+| META_DAILY_BUDGET_USD | User | Daily AI spend stop in USD. Keep it set, default 10. |
+| SUPABASE_URL | User | Supabase, Project Settings, API tab. |
+| SUPABASE_SECRET_KEY | User | Supabase, the `sb_secret_...` key. |
+| SUPABASE_STORAGE_BUCKET | Manager | Default `uploads`, leave as is. |
+| SUPABASE_DB_URL | User | Supabase, Project Settings, Database, connection string. |
+| SESSION_SECRET | Manager | `openssl rand -hex 32`. |
+| APP_BASE_URL | Manager | `https://settle.example.com`, the public https URL. |
+| BILLING_ENABLED | Manager | `false` until step 7, then `true`. |
+| STRIPE_SECRET_KEY | User | Stripe dashboard, test key `sk_test_...` first. |
+| STRIPE_WEBHOOK_SECRET | Manager | From the Stripe webhook endpoint, `whsec_...`. |
+| STRIPE_PRICE_PRO_MONTHLY | User | Stripe price id for S$7.99 a month. |
+| STRIPE_PRICE_PRO_YEARLY | User | Stripe price id for S$63.99 a year. |
+| STRIPE_PRICE_PRO_YEARLY_PAYNOW | User | Stripe one time price id for the PayNow year, optional. |
+
+- [ ] **[Manager]** App container up and healthy: `docker compose -f deploy/docker-compose.yml ps` shows the app healthy and `curl -s https://settle.example.com/api/health` prints `{"ok":true}`.
+
+## 3. Database
+
+- [ ] **[Manager]** Apply the migrations in order in the Supabase SQL editor: `supabase/migrations/0001_init.sql`, then `0002_billing.sql`, then `0003_pending_actions.sql`, then anything newer in `supabase/migrations/` by number. One file at a time, each in one transaction.
+- [ ] **[Manager]** Verify with counts (SQL editor, read only):
+
+```sql
+select count(*) from users;
+select count(*) from subscriptions;
+select count(*) from usage_events;
+select count(*) from pending_actions;
+```
+
+Four numbers, no errors, is a pass. These tables already exist from earlier deploys; a fresh project starts at zero for all of them.
+
+## 4. Telegram
+
+- [ ] **[User]** In @BotFather, `/setdomain` with the bare production domain (no https, no path), so the web login widget is allowed to run.
+- [ ] **[User]** Check the bot's privacy mode: BotFather, `/setprivacy`, disabled, so the bot can read group messages it is mentioned in. (Group use needs this; private chats always work.)
+- [ ] **[Manager]** Register the webhook with the allowed updates (message, callback_query and pre_checkout_query; payments never arrive without the last one):
+
+```
+bun --env-file=/opt/settle.env run scripts/set-webhook.ts
+```
+
+- [ ] **[User]** In BotFather, `/setcommands` and paste exactly this list:
+
+```
+start - say hi and get your dashboard link
+help - what Settle understands
+dashboard - open your task list on the web
+tasks - your next few tasks
+done - tick one off, like /done 1
+pro - about Settle Pro
+paysupport - help with a payment
+```
+
+- [ ] **[Manager]** Send `/start` from an allowlisted account and get a reply.
+
+## 5. Stripe, test mode first, then live
+
+- [ ] **[User]** Stripe test mode: create the product `Settle Pro` with the S$7.99 monthly and S$63.99 yearly recurring prices, plus the one time S$63.99 price for PayNow. Copy the three price ids into the env file (`STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_YEARLY`, `STRIPE_PRICE_PRO_YEARLY_PAYNOW`).
+- [ ] **[User]** Add a webhook endpoint in Stripe pointing at `https://settle.example.com/api/stripe/webhook` with the four events listed in `docs/DEPLOY.md` (checkout.session.completed, customer.subscription.updated, customer.subscription.deleted, invoice.payment_failed). Copy the signing secret into `STRIPE_WEBHOOK_SECRET` and restart the app.
+- [ ] **[User]** Put the test key into `STRIPE_SECRET_KEY`. Keep `sk_test_` values until step 8 of this section has passed.
+- [ ] **[Manager]** Local webhook forwarding when needed:
+
+```
+stripe listen --forward-to localhost:3000/api/stripe/webhook
+```
+
+- [ ] **[User]** Test purchases with the card `4242 4242 4242 4242`: monthly, yearly, and the PayNow year. After each: the `subscriptions` row exists (active, right provider), and `/billing` shows Pro with the Manage subscription button. Test a cancel from the customer portal and confirm the row goes `canceled`.
+- [ ] **[User]** Switch to live keys when everything above passed: activate the Stripe account, create the same product and prices in live mode, add the live webhook endpoint, then replace the five Stripe values in the env file and restart. No code changes.
+
+## 6. Telegram Stars
+
+- [ ] **[User]** From the owner's Telegram account, send `/pro` to the bot and buy one month with Stars when the invoice appears (the Stars price comes from `lib/billing/plans.ts`). Expect the activation message and an active `stars` row in `subscriptions`.
+- [ ] **[Manager]** If a refund is needed, note the `telegram_payment_charge_id` from the `subscriptions` row, then:
+
+```
+bun --env-file=/opt/settle.env run scripts/refund-stars.ts --user <telegram user id> --charge <charge id>
+```
+
+Dry run by default; add `--yes` to execute.
+
+## 7. THE SWITCH (order matters)
+
+- [ ] **[Manager]** First `BILLING_ENABLED=true` in the env file. Keep `ALLOWLIST_ENABLED=true`. Restart the app:
+
+```
+docker compose -f deploy/docker-compose.yml up -d --force-recreate app
+```
+
+- [ ] **[Manager]** Verify with billing on and the allowlist still on: send a math photo from an allowlisted account, use up the free quota if practical (or set a tiny quota in a staging env) and check the quota reply mentions the reset date; open `/dashboard` and confirm the Plan card renders with usage numbers.
+- [ ] **[Manager]** Now set `ALLOWLIST_ENABLED=false`. Restart again. Why this order: with billing off, every user is Pro with unlimited AI, so opening the bot first would let strangers spend the owner's money. Billing on means every new user is Free with small monthly quotas and the daily cap.
+- [ ] **[Manager]** Run the smoke script and the stats script against production:
+
+```
+bun run scripts/smoke.ts https://settle.example.com
+bun --env-file=/opt/settle.env run scripts/stats.ts
+```
+
+- [ ] **[Manager]** From an account NOT on `ALLOWED_TELEGRAM_IDS`, send `/start`. Expect a normal welcome (the bot is open). Then send one photo and confirm a task is created and the Plan card counts it.
+
+## 8. First hour watch list
+
+- [ ] **[Manager]** Watch the app log: `docker compose -f deploy/docker-compose.yml logs -f app`. Look for repeated `[telegram] handler error` or `[billing]` lines.
+- [ ] **[Manager]** Watch AI spend: `META_DAILY_BUDGET_USD` is the hard stop; the stats script prints cost today (SGT) and cost by purpose:
+
+```
+bun --env-file=/opt/settle.env run scripts/stats.ts --days 1
+```
+
+- [ ] **[Manager]** Capture these numbers for the presentation (rerun the stats script, or use `--json` to copy exact values): users total, new users in the last 24 hours, uploads total, AI cost total, cost today, active subscriptions by provider, estimated monthly recurring revenue, Stars subscribers.
+- [ ] **[Manager]** Check the daily upload cap behaves: a student who somehow sends more than the daily cap in a day gets the pause-for-today reply and nothing breaks.
+
+## 9. Rollback
+
+- [ ] **[Manager]** Close the bot again instantly: set `ALLOWLIST_ENABLED=true` in the env file and restart the app container. Existing sessions and subscriptions are untouched; the web login gate closes with the bot because it reads the same policy. `BILLING_ENABLED` stays `true`.
+- [ ] **[Manager]** Revert the image if the new build itself is bad (see `docs/DEPLOY.md`, "Rollback"):
+
+```
+docker tag settle:latest settle:broken
+docker tag settle:previous settle:latest
+docker compose -f deploy/docker-compose.yml up -d --force-recreate app
+```
+
+- [ ] **[Manager]** Refund a Stripe payment from the Stripe dashboard (Payments, the charge, Refund); the webhook marks the subscription canceled. Refund Stars with `scripts/refund-stars.ts` (step 6). A refunded student keeps their tasks; only Pro features relock.
+
+## 10. Known limits, not built
+
+- No account merging. A student who switches Telegram accounts gets a new, empty account; moving tasks between accounts is a manual database job.
+- No email receipts. Stripe emails receipts; Stars payments have no email receipt, the Telegram payment message is the record.
+- No tax handling. Prices are as configured; GST or anything similar is the owner's bookkeeping.
+- The subscriptions row does not record monthly versus yearly, so the stats script prints the MRR as a clearly labelled band, not an exact figure.
+- The Vercel deployment stays a demo. It has its own env and its own database assignment history; do not point users at it.

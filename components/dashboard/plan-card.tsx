@@ -1,5 +1,5 @@
-import { Chunk, ChunkButton } from "@/components/settle";
-import { usageLine, type PlanView } from "@/lib/dashboard/plan";
+import { Chunk, ChunkButton, Sticker } from "@/components/settle";
+import { usageLine, type LockState, type PlanView } from "@/lib/dashboard/plan";
 
 // The usage half of the upgrade panel from the brief's T19: what the student
 // used this month and when it resets. With Stripe configured and billing on
@@ -39,6 +39,35 @@ export function PlanCard({
         ) : (
           <ChunkButton disabled>Coming soon</ChunkButton>
         )}
+      </div>
+    </Chunk>
+  );
+}
+
+// Direction C banner above the Plan card for a Free student who ran into a
+// monthly limit. States the fact and the reset date, points to /billing when
+// checkout is open. No prices and no Stars numbers here or anywhere in it.
+export function LockBanner({
+  state,
+  billingOpen = false,
+}: {
+  state: LockState;
+  billingOpen?: boolean;
+}) {
+  return (
+    <Chunk tone="pop" className="p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <Sticker tone="ink" tilt={-2}>
+            limit reached
+          </Sticker>
+          <p className="mt-3 max-w-xs text-base leading-relaxed">{state.sentence}</p>
+        </div>
+        {billingOpen ? (
+          <ChunkButton tone="ink" render={<a href="/billing" />} className="shrink-0 self-start">
+            See plans
+          </ChunkButton>
+        ) : null}
       </div>
     </Chunk>
   );
