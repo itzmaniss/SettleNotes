@@ -183,6 +183,7 @@ export function makeDeps(
         inputKind: "plain_message",
         pdfTruncated: false,
         starter: null,
+        pendingPrompts: [],
       };
     },
     botToken: FAKE_TOKEN,

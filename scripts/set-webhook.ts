@@ -2,6 +2,7 @@
 // Usage: bun run scripts/set-webhook.ts
 import { env } from "../lib/env";
 import { ensureBotReady } from "../lib/telegram/bot";
+import { TELEGRAM_ALLOWED_UPDATES } from "../lib/telegram/callbacks";
 import { resolveWebhookUrl } from "../lib/telegram/guards";
 
 let url: string;
@@ -15,7 +16,7 @@ try {
 const bot = await ensureBotReady();
 await bot.api.setWebhook(url, {
   secret_token: env.TELEGRAM_WEBHOOK_SECRET,
-  allowed_updates: ["message", "callback_query"] as const,
+  allowed_updates: [...TELEGRAM_ALLOWED_UPDATES],
 });
 
 // Never print the token or the secret, the URL is the only thing worth showing.

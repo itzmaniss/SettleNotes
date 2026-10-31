@@ -8,6 +8,7 @@ import type {
   UpdateTaskPatch,
 } from "../../lib/db/queries";
 import type { TaskRow, UploadRow, UserRow } from "../../lib/db/types";
+import type { PendingActionInput } from "../../lib/clarify/types";
 import { quotaHitReply } from "../../lib/billing/copy";
 import type { GenerateObjectOptions, MetaClient } from "../../lib/meta/client";
 import { executeOps } from "../../lib/pipeline/execute";
@@ -270,7 +271,7 @@ describe("ingestContent: create, clarify and nothing branches", () => {
     assertNoDashes(reply);
   });
 
-  test("low confidence: no writes, the action surfaces as a gentle question", async () => {
+  test("low confidence: no task writes, the action becomes a stored Yes/No prompt", async () => {
     const unsure: UnderstandOutput = {
       input_kind: "plain_message",
       extracted_text: "x",
@@ -281,7 +282,30 @@ describe("ingestContent: create, clarify and nothing branches", () => {
     };
     const fakeDb = makeFakeDb();
     const { generateObject } = makeGenerateObject(unsure);
-    const deps: IngestDeps = { ...createIngestDeps(), generateObject, ...fakeDb, now: () => NOW };
+    const stored: PendingActionInput[] = [];
+    let pendingSeq = 0;
+    const deps: IngestDeps = {
+      ...createIngestDeps(),
+      generateObject,
+      ...fakeDb,
+      insertPendingAction: async (i) => {
+        stored.push(i);
+        pendingSeq += 1;
+        return {
+          id: `pending-${pendingSeq}`,
+          user_id: i.userId,
+          upload_id: i.uploadId,
+          kind: i.kind,
+          task_id: i.taskId,
+          payload: i.payload,
+          status: "pending",
+          expires_at: NOW.toISOString(),
+          created_at: NOW.toISOString(),
+          resolved_at: null,
+        };
+      },
+      now: () => NOW,
+    };
 
     const outcome = await ingestContent(deps, makeInput());
 
@@ -290,10 +314,189 @@ describe("ingestContent: create, clarify and nothing branches", () => {
     expect(fakeDb.inserts).toHaveLength(0);
     expect(fakeDb.updates).toHaveLength(0);
     expect(fakeDb.events).toHaveLength(0);
+    // The action moved out of the summary's clarify list and into a prompt.
+    expect(outcome.result.clarify).toHaveLength(0);
+    expect(outcome.pendingPrompts).toHaveLength(1);
+    expect(outcome.pendingPrompts[0]).toEqual({
+      pendingId: "pending-1",
+      text: 'I think this is a new task: "MA2001 Quiz 2", due Tue 10 Nov, 11:59pm. Add it?',
+    });
+    // Same conversions as the confident path: due_local already UTC.
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toEqual({
+      userId: "user-1",
+      uploadId: "upload-1",
+      kind: "create",
+      taskId: null,
+      payload: {
+        title: "MA2001 Quiz 2",
+        course: "MA2001",
+        kind: "test",
+        dueAt: "2026-11-10T15:59:00.000Z",
+        effort: null,
+        evidence: "got quiz 2 on tue",
+      },
+    });
+    const reply = summaryReply(outcome);
+    expect(reply).not.toContain("I wasn't sure");
+    assertNoDashes(reply);
+  });
+
+  test("a failing pending insert falls back to the text-only line and keeps the rest of the flow", async () => {
+    const unsure: UnderstandOutput = {
+      input_kind: "plain_message",
+      extracted_text: "x",
+      actions: [
+        { ...CREATE_OUTPUT.actions[0], confidence: 0.3 },
+      ],
+      needs_clarification: null,
+    };
+    const fakeDb = makeFakeDb();
+    const { generateObject } = makeGenerateObject(unsure);
+    const deps: IngestDeps = {
+      ...createIngestDeps(),
+      generateObject,
+      ...fakeDb,
+      insertPendingAction: async () => {
+        throw new Error("db insertPendingAction failed: connection gone");
+      },
+      now: () => NOW,
+    };
+
+    const outcome = await ingestContent(deps, makeInput());
+
+    expect(outcome.kind).toBe("tasks");
+    if (outcome.kind !== "tasks") return;
+    expect(outcome.pendingPrompts).toHaveLength(0);
     expect(outcome.result.clarify).toHaveLength(1);
+    expect(fakeDb.finished[0].patch.status).toBe("done");
     const reply = summaryReply(outcome);
     expect(reply).toContain('I wasn\'t sure about "MA2001 Quiz 2", could you confirm?');
     assertNoDashes(reply);
+  });
+
+  test("at most 3 prompts per capture: extra low-confidence actions stay text-only", async () => {
+    const five: UnderstandOutput = {
+      input_kind: "chat_screenshot",
+      extracted_text: "x",
+      actions: Array.from({ length: 5 }, (_, i) => ({
+        ...CREATE_OUTPUT.actions[0],
+        title: `Quiz ${i + 1}`,
+        course: null,
+        confidence: 0.3,
+      })),
+      needs_clarification: null,
+    };
+    const fakeDb = makeFakeDb();
+    const { generateObject } = makeGenerateObject(five);
+    let pendingSeq = 0;
+    const deps: IngestDeps = {
+      ...createIngestDeps(),
+      generateObject,
+      ...fakeDb,
+      insertPendingAction: async (i) => {
+        pendingSeq += 1;
+        return {
+          id: `pending-${pendingSeq}`,
+          user_id: i.userId,
+          upload_id: i.uploadId,
+          kind: i.kind,
+          task_id: i.taskId,
+          payload: i.payload,
+          status: "pending",
+          expires_at: NOW.toISOString(),
+          created_at: NOW.toISOString(),
+          resolved_at: null,
+        };
+      },
+      now: () => NOW,
+    };
+
+    const outcome = await ingestContent(deps, makeInput());
+
+    expect(outcome.kind).toBe("tasks");
+    if (outcome.kind !== "tasks") return;
+    expect(outcome.pendingPrompts).toHaveLength(3);
+    expect(outcome.result.clarify).toHaveLength(2);
+    expect(outcome.pendingPrompts.map((p) => p.pendingId)).toEqual([
+      "pending-1",
+      "pending-2",
+      "pending-3",
+    ]);
+  });
+
+  test("a low-confidence update with a resolvable ref prompts about the current task; an unresolvable one stays text-only", async () => {
+    const mixed: UnderstandOutput = {
+      input_kind: "chat_screenshot",
+      extracted_text: "x",
+      actions: [
+        {
+          type: "update",
+          task_ref: "T1",
+          title: null,
+          course: null,
+          kind: null,
+          due_local: "2026-11-06T23:59",
+          effort: null,
+          evidence: "maybe extend lab 4",
+          confidence: 0.3,
+        },
+        {
+          type: "complete",
+          task_ref: "T99",
+          title: null,
+          course: null,
+          kind: null,
+          due_local: null,
+          effort: null,
+          evidence: "done with the mystery task",
+          confidence: 0.3,
+        },
+      ],
+      needs_clarification: null,
+    };
+    const fakeDb = makeFakeDb();
+    const { generateObject } = makeGenerateObject(mixed);
+    const stored: PendingActionInput[] = [];
+    let pendingSeq = 0;
+    const deps: IngestDeps = {
+      ...createIngestDeps(),
+      generateObject,
+      ...fakeDb,
+      insertPendingAction: async (i) => {
+        stored.push(i);
+        pendingSeq += 1;
+        return {
+          id: `pending-${pendingSeq}`,
+          user_id: i.userId,
+          upload_id: i.uploadId,
+          kind: i.kind,
+          task_id: i.taskId,
+          payload: i.payload,
+          status: "pending",
+          expires_at: NOW.toISOString(),
+          created_at: NOW.toISOString(),
+          resolved_at: null,
+        };
+      },
+      now: () => NOW,
+    };
+
+    const outcome = await ingestContent(deps, makeInput());
+
+    expect(outcome.kind).toBe("tasks");
+    if (outcome.kind !== "tasks") return;
+    expect(outcome.pendingPrompts).toHaveLength(1);
+    expect(outcome.pendingPrompts[0].text).toBe('Should I move "CS2030 Lab 4" to Fri 6 Nov, 11:59pm?');
+    expect(stored[0].kind).toBe("update");
+    expect(stored[0].taskId).toBe("task-1");
+    expect(stored[0].payload).toEqual({
+      dueAt: "2026-11-06T15:59:00.000Z",
+      evidence: "maybe extend lab 4",
+    });
+    // The complete for the unknown ref gets no buttons, just the old line.
+    expect(outcome.result.clarify).toHaveLength(1);
+    expect(outcome.result.clarify[0].evidence).toBe("done with the mystery task");
   });
 
   test("model question passes through verbatim on the nothing branch", async () => {

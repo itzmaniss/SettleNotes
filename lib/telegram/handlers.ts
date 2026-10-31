@@ -21,7 +21,7 @@ import {
 import { inspectPdf, isSupportedMime, InvalidPdfError, normalizeImage, UnsupportedMimeError } from "@/lib/media/normalize";
 import { uploadOriginal } from "@/lib/media/storage";
 import { createIngestDeps, ingestContent } from "@/lib/pipeline/ingest";
-import type { IngestInput, IngestOutcome } from "@/lib/pipeline/ingest";
+import type { IngestInput, IngestOutcome, PendingPrompt } from "@/lib/pipeline/ingest";
 import { isAllowedUser } from "@/lib/telegram/guards";
 import { countRecentUploads, createRateLimiter, type RateLimitCheck } from "@/lib/telegram/limits";
 import { downloadTelegramFile, FileTooLargeError, type FileFetchDeps } from "@/lib/telegram/files";
@@ -35,6 +35,7 @@ import {
   heardPrefix,
   mathPendingReply,
   nothingFoundReply,
+  pendingActionKeyboard,
   pdfTruncatedNote,
   pdfUnreadableReply,
   rateLimitReply,
@@ -289,6 +290,7 @@ export async function handleVoiceMessage(ctx: BotContextLike, deps: HandlerDeps)
     }
     const keyboard = dashboardKeyboard(deps.appBaseUrl);
     await replySafely(ctx, withHeard(heard, text), keyboard ? { reply_markup: keyboard } : undefined);
+    if (outcome.kind === "tasks") await sendPendingPrompts(ctx, outcome.pendingPrompts);
   } catch (error) {
     if (upload !== undefined) {
       try {
@@ -448,6 +450,8 @@ async function processMessage(ctx: BotContextLike, deps: HandlerDeps, spec: Mess
 
     const keyboard = dashboardKeyboard(deps.appBaseUrl);
     await replySafely(ctx, text, keyboard ? { reply_markup: keyboard } : undefined);
+    // Clarification buttons come after the summary so the list stays readable.
+    if (outcome.kind === "tasks") await sendPendingPrompts(ctx, outcome.pendingPrompts);
   } catch (error) {
     if (upload !== undefined) {
       try {
@@ -499,6 +503,14 @@ async function replySafely(
   } catch (error) {
     // A failed reply must never bubble into after() or polling.
     console.error("[telegram] reply failed:", error instanceof Error ? error.message : String(error));
+  }
+}
+
+// One message per stored low-confidence action, each with its own Yes/No
+// keyboard. A failed send only loses that one prompt; the row expires unused.
+async function sendPendingPrompts(ctx: BotContextLike, prompts: PendingPrompt[]): Promise<void> {
+  for (const prompt of prompts) {
+    await replySafely(ctx, prompt.text, { reply_markup: pendingActionKeyboard(prompt.pendingId) });
   }
 }
 

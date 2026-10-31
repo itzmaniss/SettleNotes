@@ -227,6 +227,7 @@ function makeDeps(overrides: {
           inputKind: "plain_message",
           pdfTruncated: false,
           starter: null,
+          pendingPrompts: [],
         }
       );
     },
@@ -289,6 +290,75 @@ describe("text messages", () => {
 
     expect(spy.replies).toHaveLength(0);
     expect(uploads).toHaveLength(0);
+  });
+
+  test("stored low-confidence actions become their own Yes/No messages after the summary", async () => {
+    const UUID = "5b1f8a2e-9c3d-4e6f-8a7b-2c1d0e9f8a7b";
+    const spy = makeCtx({ text: "got quiz 2 on tue maybe", date: 1, chat: { id: 101, type: "private" }, from: { id: 101, is_bot: false, first_name: "Tim" } });
+    const { deps } = makeDeps({
+      ingestOutcome: {
+        kind: "tasks",
+        result: { created: [], updated: [], completed: [], clarify: [] },
+        clarification: null,
+        inputKind: "plain_message",
+        pdfTruncated: false,
+        starter: null,
+        pendingPrompts: [
+          { pendingId: UUID, text: 'I think this is a new task: "MA2001 Quiz 2". Add it?' },
+        ],
+      },
+    });
+
+    await handleTextMessage(spy.ctx, deps);
+
+    expect(spy.replies).toHaveLength(2);
+    expect(spy.replies[0].text).toBe("Your list is up to date.");
+    expect(spy.replies[1].text).toBe('I think this is a new task: "MA2001 Quiz 2". Add it?');
+    const markup = spy.replies[1].other?.reply_markup as {
+      inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
+    };
+    expect(markup.inline_keyboard[0].map((b) => b.text)).toEqual(["Yes", "No"]);
+    expect(markup.inline_keyboard[0].map((b) => b.callback_data)).toEqual([
+      `pa:y:${UUID}`,
+      `pa:n:${UUID}`,
+    ]);
+  });
+
+  test("a text-only clarify fallback keeps the unsure line and sends no prompt message", async () => {
+    const spy = makeCtx({ text: "not sure what this is", date: 1, chat: { id: 101, type: "private" }, from: { id: 101, is_bot: false, first_name: "Tim" } });
+    const { deps } = makeDeps({
+      ingestOutcome: {
+        kind: "tasks",
+        result: {
+          created: [],
+          updated: [],
+          completed: [],
+          clarify: [
+            {
+              type: "complete",
+              taskId: null,
+              title: null,
+              course: null,
+              kind: null,
+              dueAt: null,
+              effort: null,
+              evidence: "done with the mystery thing",
+              confidence: 0.3,
+            },
+          ],
+        },
+        clarification: null,
+        inputKind: "plain_message",
+        pdfTruncated: false,
+        starter: null,
+        pendingPrompts: [],
+      },
+    });
+
+    await handleTextMessage(spy.ctx, deps);
+
+    expect(spy.replies).toHaveLength(1);
+    expect(spy.replies[0].text).toContain('I wasn\'t sure about "done with the mystery thing", could you confirm?');
   });
 });
 
@@ -902,6 +972,48 @@ describe("allowlistMiddleware", () => {
 
     expect(nextCalls).toBe(0);
     expect(refusals).toEqual([]);
+  });
+
+  test("a callback_query from an allowed user reaches the handlers", async () => {
+    const refusals: number[] = [];
+    let nextCalls = 0;
+    const next: NextFunction = async () => {
+      nextCalls += 1;
+    };
+    const mw = allowlistMiddleware([101], async (chatId) => {
+      refusals.push(chatId);
+    });
+    const ctx = {
+      from: { id: 101, is_bot: false, first_name: "Tim" } as User,
+      chat: { id: 101, type: "private" } as Chat,
+      callbackQuery: { data: `pa:y:${"5b1f8a2e-9c3d-4e6f-8a7b-2c1d0e9f8a7b"}` },
+    } as unknown as Context;
+
+    await mw(ctx, next);
+
+    expect(nextCalls).toBe(1);
+    expect(refusals).toEqual([]);
+  });
+
+  test("a stranger tapping a Yes/No button gets the refusal and never reaches the callback handler", async () => {
+    const refusals: number[] = [];
+    let nextCalls = 0;
+    const next: NextFunction = async () => {
+      nextCalls += 1;
+    };
+    const mw = allowlistMiddleware([101], async (chatId) => {
+      refusals.push(chatId);
+    });
+    const ctx = {
+      from: { id: 999, is_bot: false, first_name: "Stranger" } as User,
+      chat: { id: 999, type: "private" } as Chat,
+      callbackQuery: { data: `pa:y:${"5b1f8a2e-9c3d-4e6f-8a7b-2c1d0e9f8a7b"}` },
+    } as unknown as Context;
+
+    await mw(ctx, next);
+
+    expect(nextCalls).toBe(0);
+    expect(refusals).toEqual([999]);
   });
 
   test("the refusal text matches the webhook route's wording", () => {

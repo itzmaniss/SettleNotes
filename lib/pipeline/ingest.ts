@@ -7,6 +7,9 @@
 import type { FinishUploadPatch } from "@/lib/db/queries";
 import { listOpenTasks as realListOpenTasks, finishUpload as realFinishUpload } from "@/lib/db/queries";
 import type { TaskRow, UploadClassifiedAs, UploadRow, UserRow } from "@/lib/db/types";
+import { buildPendingActions } from "@/lib/clarify/build";
+import { insertPendingAction as realInsertPendingAction } from "@/lib/clarify/queries";
+import type { PendingActionInput, PendingActionRow } from "@/lib/clarify/types";
 import { getMetaClient } from "@/lib/meta/index";
 import type { MetaClient } from "@/lib/meta/client";
 import { BudgetExceededError } from "@/lib/meta/client";
@@ -36,6 +39,9 @@ export type IngestDeps = {
   listOpenTasks: (userId: string) => Promise<TaskRow[]>;
   executeOps: (ops: Op[], ctx: { userId: string; uploadId: string }) => Promise<ExecuteResult>;
   finishUpload: (id: string, patch: FinishUploadPatch) => Promise<void>;
+  // Stores one low-confidence action for a Yes/No tap. Injected so tests fake
+  // it; a failure is caught per action and falls back to the text-only line.
+  insertPendingAction: (i: PendingActionInput) => Promise<PendingActionRow>;
   now: () => Date;
   // Starter orchestration deps (defaults built lazily in createIngestDeps).
   starters?: StartersDeps;
@@ -65,6 +71,8 @@ export type IngestInput = {
   storagePath?: string | null;
 };
 
+export type PendingPrompt = { pendingId: string; text: string };
+
 export type IngestOutcome =
   | {
       kind: "tasks";
@@ -73,6 +81,10 @@ export type IngestOutcome =
       inputKind: UnderstandOutput["input_kind"];
       pdfTruncated: boolean;
       starter: StarterReplyInfo | null;
+      // Low-confidence actions that got Yes/No buttons; one message each,
+      // sent after the summary. `result.clarify` keeps only the actions that
+      // fell back to the text-only line.
+      pendingPrompts: PendingPrompt[];
     }
   | { kind: "nothing"; clarification: string | null }
   | { kind: "math"; caption: string; annotated: Buffer | null; practiceText: string | null; extra: string | null }
@@ -100,6 +112,7 @@ export function createIngestDeps(overrides: Partial<IngestDeps> = {}): IngestDep
     listOpenTasks: realListOpenTasks,
     executeOps: (ops, ctx) => executeOps(ops, ctx),
     finishUpload: realFinishUpload,
+    insertPendingAction: (i) => realInsertPendingAction(i),
     now: () => new Date(),
     // Built on first access: the real deps only resolve the Meta and Supabase
     // clients inside their functions, so nothing is read at import time.
@@ -189,6 +202,32 @@ export async function ingestContent(deps: IngestDeps, input: IngestInput): Promi
     uploadId: input.upload.id,
   });
 
+  // Low-confidence actions become Yes/No prompts. A row that cannot be built
+  // (no resolvable target, no title) or cannot be stored keeps today's
+  // text-only line instead; neither can lose the task writes above.
+  const pendingPrompts: PendingPrompt[] = [];
+  const clarifyFallbacks: ReconcileAction[] = [];
+  if (result.clarify.length > 0) {
+    const built = buildPendingActions(
+      result.clarify,
+      { userId: input.user.id, uploadId: input.upload.id },
+      openTasks,
+    );
+    clarifyFallbacks.push(...built.fallbacks);
+    for (const draft of built.drafts) {
+      try {
+        const row = await deps.insertPendingAction(draft.input);
+        pendingPrompts.push({ pendingId: row.id, text: draft.text });
+      } catch (error) {
+        console.error(
+          "[ingest] failed to store a pending action:",
+          error instanceof Error ? error.message : String(error),
+        );
+        clarifyFallbacks.push(draft.action);
+      }
+    }
+  }
+
   const { starter, created } = await attachStarterIfDocument(deps, input, output.input_kind, result);
   await finishDone(CLASSIFIED_AS[output.input_kind]);
 
@@ -196,16 +235,17 @@ export async function ingestContent(deps: IngestDeps, input: IngestInput): Promi
   // fold it into the created list so the reply shows it like any other task.
   const hasWrites =
     created.length > 0 || result.updated.length > 0 || result.completed.length > 0;
-  if (!hasWrites && result.clarify.length === 0) {
+  if (!hasWrites && clarifyFallbacks.length === 0 && pendingPrompts.length === 0) {
     return { kind: "nothing", clarification: output.needs_clarification };
   }
   return {
     kind: "tasks",
-    result: { ...result, created },
+    result: { ...result, created, clarify: clarifyFallbacks },
     clarification: output.needs_clarification,
     inputKind: output.input_kind,
     pdfTruncated: input.pdf?.tooManyPages ?? false,
     starter,
+    pendingPrompts,
   };
 }
 

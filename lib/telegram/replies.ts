@@ -3,6 +3,7 @@
 // anywhere in this file: students read every string here.
 import { InlineKeyboard } from "grammy";
 import { RATE_LIMIT } from "@/lib/telegram/limits";
+import type { PendingActionKind } from "@/lib/clarify/types";
 import type { ExecuteResult } from "@/lib/pipeline/execute";
 import type { StarterReplyInfo } from "@/lib/pipeline/starters";
 
@@ -256,4 +257,89 @@ export function dashboardKeyboard(appBaseUrl: string): InlineKeyboard | undefine
   if (base.protocol !== "https:" || LOOPBACK_HOSTS.has(hostname)) return undefined;
   const url = `${base.href.replace(/\/+$/, "")}${DASHBOARD_PATH}`;
   return new InlineKeyboard().url("Open dashboard", url);
+}
+
+// ---- Low-confidence clarifications: one prompt message with Yes/No buttons,
+// backed by a pending_actions row (migration 0003).
+
+// Telegram caps callback data at 64 bytes; the pattern also keeps taps on
+// other bots' buttons (same chat, different data) from reaching the flow.
+export const PENDING_CALLBACK_DATA_PATTERN = /^pa:(y|n):([0-9a-f-]{36})$/;
+
+export function pendingActionCallbackData(pendingId: string, yes: boolean): string {
+  return `pa:${yes ? "y" : "n"}:${pendingId}`;
+}
+
+export function pendingActionKeyboard(pendingId: string): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("Yes", pendingActionCallbackData(pendingId, true))
+    .text("No", pendingActionCallbackData(pendingId, false));
+}
+
+// Telegram keeps a message's old keyboard when an edit omits reply_markup;
+// an empty button matrix is how it actually goes away. The default
+// constructor would still carry one empty row.
+export function clearedKeyboard(): InlineKeyboard {
+  return new InlineKeyboard([]);
+}
+
+export function createClarifyPrompt(title: string, dueAt: string | null): string {
+  if (dueAt == null) return `I think this is a new task: "${title}". Add it?`;
+  return `I think this is a new task: "${title}", due ${formatDue(dueAt)}. Add it?`;
+}
+
+export function updateDueClarifyPrompt(taskTitle: string, newDueAt: string): string {
+  return `Should I move "${taskTitle}" to ${formatDue(newDueAt)}?`;
+}
+
+export function updateClarifyPrompt(taskTitle: string): string {
+  return `Should I update "${taskTitle}"?`;
+}
+
+export function completeClarifyPrompt(taskTitle: string): string {
+  return `Did you finish "${taskTitle}"?`;
+}
+
+export function pendingExpiredReply(): string {
+  return "That one has expired. Send it to me again if you still need it.";
+}
+
+export function pendingHandledReply(): string {
+  return "Already handled.";
+}
+
+export function pendingDismissedReply(): string {
+  return "Okay, I left it alone.";
+}
+
+export function pendingTaskChangedReply(): string {
+  return "That task has changed, so I did nothing.";
+}
+
+// The tap-time confirmation, in the same wording style as summaryReply.
+// Empty result lists (should not happen) fall back to the generic line so a
+// broken apply never confirms a write that did not land.
+export function pendingAppliedReply(
+  kind: PendingActionKind,
+  result: Pick<ExecuteResult, "created" | "updated" | "completed">,
+): string {
+  if (kind === "create") {
+    const task = result.created[0];
+    if (task == null) return commandFailedReply();
+    return task.due_at == null
+      ? `Added: ${task.title}`
+      : `Added: ${task.title} (due ${formatDue(task.due_at)})`;
+  }
+  if (kind === "complete") {
+    const task = result.completed[0];
+    if (task == null) return commandFailedReply();
+    return `Ticked off: ${task.title}`;
+  }
+  const change = result.updated[0];
+  if (change == null) return commandFailedReply();
+  if (change.after.dueAt !== undefined) {
+    const was = change.before.dueAt ?? null;
+    return `Moved ${change.task.title} to ${formatDue(change.after.dueAt ?? null)} (was ${formatDue(was)})`;
+  }
+  return `Updated ${change.task.title}.`;
 }

@@ -8,6 +8,7 @@ import {
   type CommandContextLike,
 } from "@/lib/telegram/commands";
 import { upsertUser } from "@/lib/db/queries";
+import { createPendingActionCallback, type CallbackContextLike } from "@/lib/telegram/callbacks";
 import { allowlistMiddleware, registerIngestHandlers } from "@/lib/telegram/handlers";
 import { REFUSAL_TEXT } from "@/lib/telegram/replies";
 
@@ -82,6 +83,14 @@ export function registerHandlers(bot: Bot): void {
 
   const doneCommand = createDoneCommand();
   bot.command("done", (ctx) => doneCommand(ctx as unknown as CommandContextLike));
+
+  // Taps on the Yes/No buttons of a low-confidence clarification. The
+  // allowlist middleware above runs first for callback updates too (they carry
+  // ctx.from), so a stranger's tap is refused before reaching this.
+  const pendingActionCallback = createPendingActionCallback();
+  bot.on("callback_query:data", (ctx) =>
+    pendingActionCallback(ctx as unknown as CallbackContextLike),
+  );
 
   registerIngestHandlers(bot);
 }
