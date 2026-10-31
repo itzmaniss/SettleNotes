@@ -29,6 +29,12 @@ export function Nav() {
             Pricing
           </a>
         </nav>
+        <Link
+          href="/login"
+          className="text-sm font-medium whitespace-nowrap underline-offset-4 hover:underline"
+        >
+          Log in
+        </Link>
         <BotButton href={botLink()} tone="accent" className="text-sm">
           Open in Telegram
         </BotButton>
