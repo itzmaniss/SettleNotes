@@ -187,3 +187,49 @@ docker compose -f deploy/docker-compose.yml up -d --force-recreate app
 - No tax handling. Prices are as configured; GST or anything similar is the owner's bookkeeping.
 - The subscriptions row does not record monthly versus yearly, so the stats script prints the MRR as a clearly labelled band, not an exact figure.
 - The Vercel deployment stays a demo. It has its own env and its own database assignment history; do not point users at it.
+
+## 11. Handling a data request
+
+A student can ask for a copy of their data, or ask you to delete it. Singapore's PDPA lets them make that request by email; the bot has no self service button for it. The two scripts do the work; this section is the process.
+
+- [ ] **[Manager]** Verify the person is who they say they are BEFORE running anything. An email address is not proof. Confirm the request from the Telegram account itself: email the student a one time phrase, send the same phrase to them through the bot from your operator Telegram account, and ask them to reply by email quoting it. Only the person who controls that Telegram account can see the phrase in the bot chat. A dashboard login link sent through the bot works the same way. If they cannot confirm from the Telegram account, stop and do not run the scripts.
+- [ ] **[Manager]** For an access request (a copy of their data):
+
+```
+bun --env-file=/opt/settle.env run scripts/export-user.ts --telegram-id <id> --out <file.json>
+```
+
+The script is read only. It refuses to overwrite an existing file and refuses paths inside the repository, because the file holds personal data and must stay out of git. It writes the file with mode 0600. Send the file to the student by email, then delete it securely.
+
+- [ ] **[Manager]** For an erasure request, run the delete script as a dry run first:
+
+```
+bun --env-file=/opt/settle.env run scripts/delete-user.ts --telegram-id <id>
+```
+
+Read the counts. If they look wrong for this student, stop and check the id again. Then add `--yes` to erase. The script scrubs the payment payloads first, removes the stored files, then deletes the users row so the database cascade removes everything else; `ai_calls` rows are kept but anonymised. Payment rows themselves stay for accounting and dedupe, with identifying fields removed.
+- [ ] **[Manager]** If the student still has an active subscription the script blocks and tells you what to cancel first: Stripe ones in the Stripe dashboard, Stars ones by the student in Telegram, PayNow ones simply run out. `--force` skips that check, but warn the student first: Stripe or Telegram may still charge them.
+- [ ] **[Manager]** Reply to the student by email when it is done. Reply within a reasonable time: aim for days, and no later than 30 days after the request. If you cannot finish in time, tell them when they will get an answer.
+- [ ] **[Manager]** Keep a note of the request date, what you did, and the date you did it, in your own private log. The scripts do not keep one for you.
+
+## 12. Refunds
+
+The money steps, per payment method. Tell the student by email in every case, and remember a refunded student keeps their tasks; only Pro features relock.
+
+### Stripe card, monthly or yearly
+
+- [ ] **[Manager]** Refund in the Stripe dashboard (Payments, the payment, Refund) AND cancel the subscription in the same sitting (Subscriptions, then Cancel). A refund alone does not stop the next renewal.
+
+### Telegram Stars
+
+- [ ] **[Manager]** Check the first charge date first: the promise is a refund within seven days of the first charge (`REFUND_WINDOW_DAYS` in `lib/billing/stars.ts`). Then:
+
+```
+bun --env-file=/opt/settle.env run scripts/refund-stars.ts --user <telegram user id> --charge <charge id> --yes
+```
+
+The script refunds the Stars payment and marks the matching Stars subscription canceled.
+
+### PayNow, one time yearly
+
+- [ ] **[Manager]** Refund in the Stripe dashboard like a card payment. There is no renewal, so the `paynow:` subscriptions row runs out by itself; set it to canceled by hand if you want it closed sooner.
