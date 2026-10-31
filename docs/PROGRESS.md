@@ -2,6 +2,13 @@
 
 Newest entry on top. Each entry: date, card(s), commit(s), gate result, live spend, decisions, next steps.
 
+## 2026-10-31 - T14 voice notes, T17 demo kit
+- Commits (local): `b2db3bc` T14; `be8696a` T17. Gate: typecheck, lint, 893 tests, build green.
+- T14: OGG to WAV 16 kHz mono via ffmpeg-static (real conversion test on a generated Opus tone), `muse-voice-transcribe-1.0` client with retries, budget guard and per-call cost logging, voice handler (notes over 3 minutes refused before download). Reply starts with `I heard: "..."`, then the normal reply; the transcript goes through the same Understand flow, so Singlish deadline moves work from voice. Not gated by the usage ledger.
+- Manager fix: the brief and ARCHITECTURE 4.6 said `languageBias: ["en"]`, but the speech-to-text doc specifies language names, so it is now `["English"]` (code, test, README, ARCHITECTURE). Not yet confirmed against the live API: the first real voice note is the test.
+- T17: `scripts/seed-demo.ts` (dry run by default, `--yes` to write, `--reset` removes only marker-tagged demo rows, refuses ids outside ALLOWED_TELEGRAM_IDS), `docs/DEMO.md` shot list, `README.md` for judges. Dry run verified by the manager; the write path has NOT been run yet (needs a supervised `--reset --yes` before recording). README quotes 893 tests and makes no math accuracy claim.
+- Not done: live voice check, seed write run, README/DEMO need a final read once real fixtures exist (`tests/fixtures/real/` does not exist yet).
+
 ## 2026-10-31 - Checkpoints
 
 Local git tags (not pushed; `git push origin --tags` would publish them):
