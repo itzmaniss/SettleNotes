@@ -9,7 +9,7 @@ import type {
 } from "@/lib/db/queries";
 import type { TaskRow, UploadKind, UploadRow, UserRow } from "@/lib/db/types";
 import { env } from "@/lib/env";
-import { BudgetExceededError } from "@/lib/meta/client";
+import { BudgetExceededError, MetaApiError, MetaTimeoutError } from "@/lib/meta/client";
 import { AudioTooLongError, convertToWav16kMono, isVoiceTooLong } from "@/lib/media/audio";
 import {
   courseKeywords,
@@ -18,22 +18,26 @@ import {
   type TranscribeResult,
   type Transcriber,
 } from "@/lib/meta/transcribe";
-import { inspectPdf, isSupportedMime, normalizeImage, UnsupportedMimeError } from "@/lib/media/normalize";
+import { inspectPdf, isSupportedMime, InvalidPdfError, normalizeImage, UnsupportedMimeError } from "@/lib/media/normalize";
 import { uploadOriginal } from "@/lib/media/storage";
 import { createIngestDeps, ingestContent } from "@/lib/pipeline/ingest";
 import type { IngestInput, IngestOutcome } from "@/lib/pipeline/ingest";
 import { isAllowedUser } from "@/lib/telegram/guards";
+import { countRecentUploads, createRateLimiter, type RateLimitCheck } from "@/lib/telegram/limits";
 import { downloadTelegramFile, FileTooLargeError, type FileFetchDeps } from "@/lib/telegram/files";
 import {
   budgetReply,
   dashboardKeyboard,
   emptyTranscriptReply,
   failureReply,
+  aiBusyReply,
   fileTooLargeReply,
   heardPrefix,
   mathPendingReply,
   nothingFoundReply,
   pdfTruncatedNote,
+  pdfUnreadableReply,
+  rateLimitReply,
   summaryReply,
   unknownCommandReply,
   unsupportedFileReply,
@@ -73,10 +77,15 @@ export type HandlerDeps = {
   listOpenTasks?: (userId: string) => Promise<TaskRow[]>;
   now?: () => Date;
   typingIntervalMs?: number;
+  // Per-user upload rate limit (uploads table backed). Optional so tests and
+  // command handlers can omit it; the real one is built lazily in
+  // createHandlerDeps and fails open when its lookup throws.
+  checkRateLimit?: RateLimitCheck;
 };
 
 export function createHandlerDeps(): HandlerDeps {
   let realTranscriber: Transcriber | undefined;
+  let rateLimiter: ReturnType<typeof createRateLimiter> | undefined;
   const deps: HandlerDeps = {
     upsertUser,
     createUpload,
@@ -102,11 +111,18 @@ export function createHandlerDeps(): HandlerDeps {
       const transcriber = realTranscriber;
       return (args: TranscribeArgs) => transcriber.transcribe(args);
     },
+    get checkRateLimit(): RateLimitCheck {
+      const limiter = (rateLimiter ??= createRateLimiter({
+        countRecentUploads,
+        ...(deps.now ? { now: deps.now } : {}),
+      }));
+      return (userId) => limiter.check(userId);
+    },
   };
   return deps;
 }
 
-export const KNOWN_COMMANDS = new Set(["/start", "/help", "/dashboard"]);
+export const KNOWN_COMMANDS = new Set(["/start", "/help", "/dashboard", "/tasks", "/done"]);
 const DEFAULT_TYPING_INTERVAL_MS = 4_000;
 const MAX_STORED_ERROR_LENGTH = 300;
 
@@ -132,7 +148,9 @@ export async function handleTextMessage(ctx: BotContextLike, deps: HandlerDeps):
   const text = ctx.message?.text ?? "";
   if (text.startsWith("/")) {
     const command = text.slice(1).split(/[\s@]/)[0] ?? "";
-    if (KNOWN_COMMANDS.has(`/${command}`)) return; // /start and /help run earlier in the chain
+    // Commands run in their own handlers earlier in the chain; seeing one here
+    // means it was already answered (or is /tasks or /done), so stay quiet.
+    if (KNOWN_COMMANDS.has(`/${command}`)) return;
     await replySafely(ctx, unknownCommandReply());
     return;
   }
@@ -210,6 +228,8 @@ export async function handleVoiceMessage(ctx: BotContextLike, deps: HandlerDeps)
       telegramChatId: ctx.chat?.id ?? ctx.from.id,
       firstName: ctx.from.first_name ?? null,
     });
+    if (!(await passRateLimit(ctx, deps, user.id))) return;
+
     upload = await deps.createUpload({
       userId: user.id,
       kind: "voice",
@@ -296,6 +316,27 @@ export async function handleOtherMessage(ctx: BotContextLike): Promise<void> {
   await replySafely(ctx, unsupportedFileReply());
 }
 
+// Rate limit gate for every ingesting message type. Runs after the user row
+// is upserted (the counter needs its id) and BEFORE the upload row, any
+// download and any AI call. Limited => one friendly reply, nothing stored.
+// A failing lookup fails open: log one line, never throw, let it through.
+async function passRateLimit(ctx: BotContextLike, deps: HandlerDeps, userId: string): Promise<boolean> {
+  const check = deps.checkRateLimit;
+  if (check === undefined) return true;
+  try {
+    const verdict = await check(userId);
+    if (verdict.allowed) return true;
+    await replySafely(ctx, rateLimitReply(verdict.retryAfterSeconds));
+    return false;
+  } catch (error) {
+    console.error(
+      "[telegram] rate limit lookup failed, letting the message through:",
+      messageOf(error, deps.botToken),
+    );
+    return true;
+  }
+}
+
 async function processMessage(ctx: BotContextLike, deps: HandlerDeps, spec: MessageSpec): Promise<void> {
   if (ctx.from === undefined) return;
 
@@ -317,6 +358,8 @@ async function processMessage(ctx: BotContextLike, deps: HandlerDeps, spec: Mess
       telegramChatId: ctx.chat?.id ?? ctx.from.id,
       firstName: ctx.from.first_name ?? null,
     });
+
+    if (!(await passRateLimit(ctx, deps, user.id))) return;
 
     const createInput: CreateUploadInput = {
       userId: user.id,
@@ -462,7 +505,9 @@ async function replySafely(
 function failureTextFor(error: unknown): string {
   if (error instanceof FileTooLargeError) return fileTooLargeReply();
   if (error instanceof UnsupportedMimeError) return unsupportedFileReply();
+  if (error instanceof InvalidPdfError) return pdfUnreadableReply();
   if (error instanceof BudgetExceededError) return budgetReply();
+  if (error instanceof MetaTimeoutError || error instanceof MetaApiError) return aiBusyReply();
   // Only ever raised on the voice path, where the student-facing copy fits.
   if (error instanceof AudioTooLongError) return voiceTooLongReply();
   return failureReply();

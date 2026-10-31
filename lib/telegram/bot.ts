@@ -2,6 +2,11 @@ import "server-only";
 import { Bot, type BotError } from "grammy";
 import { env } from "@/lib/env";
 import { createDashboardCommand, type DashboardContextLike } from "@/lib/auth/dashboard-command";
+import {
+  createDoneCommand,
+  createTasksCommand,
+  type CommandContextLike,
+} from "@/lib/telegram/commands";
 import { upsertUser } from "@/lib/db/queries";
 import { allowlistMiddleware, registerIngestHandlers } from "@/lib/telegram/handlers";
 import { REFUSAL_TEXT } from "@/lib/telegram/replies";
@@ -49,9 +54,10 @@ function createBot(): Bot {
   return bot;
 }
 
-// The /start, /help and /dashboard handlers below are final;
+// The /start, /help, /dashboard, /tasks and /done handlers below are final;
 // registerIngestHandlers adds the text, photo, document and catch-all message
-// handlers after them.
+// handlers after them, so a "/tasks" text always reaches its command handler
+// first and never the generic text handler.
 export function registerHandlers(bot: Bot): void {
   bot.command("start", async (ctx) => {
     const from = ctx.from;
@@ -71,6 +77,12 @@ export function registerHandlers(bot: Bot): void {
     dashboardCommand(ctx as unknown as DashboardContextLike),
   );
 
+  const tasksCommand = createTasksCommand();
+  bot.command("tasks", (ctx) => tasksCommand(ctx as unknown as CommandContextLike));
+
+  const doneCommand = createDoneCommand();
+  bot.command("done", (ctx) => doneCommand(ctx as unknown as CommandContextLike));
+
   registerIngestHandlers(bot);
 }
 
@@ -87,7 +99,7 @@ function startText(firstName: string | null, dashboardUrl: string): string {
   ].join("\n");
 }
 
-const HELP_TEXT = [
+export const HELP_TEXT = [
   "Here is what you can send me:",
   "",
   "- Screenshots of class or group chats. I will pull out the deadlines and add them to your task list.",
@@ -98,5 +110,7 @@ const HELP_TEXT = [
   "Commands:",
   "/help - show this list",
   "/start - reintroduce myself",
+  "/tasks - show the five things to handle first",
+  "/done <n> - tick one off by its number, like /done 1",
   "/dashboard - get a single use link to open your dashboard",
 ].join("\n");

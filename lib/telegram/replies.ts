@@ -2,6 +2,7 @@
 // text (no parse_mode), so nothing ever needs escaping. No em or en dashes
 // anywhere in this file: students read every string here.
 import { InlineKeyboard } from "grammy";
+import { RATE_LIMIT } from "@/lib/telegram/limits";
 import type { ExecuteResult } from "@/lib/pipeline/execute";
 import type { StarterReplyInfo } from "@/lib/pipeline/starters";
 
@@ -124,6 +125,12 @@ export function failureReply(): string {
   return "Sorry, I couldn't read that one. Could you send a clearer photo or the PDF instead?";
 }
 
+// The AI service being slow or down is not the student's fault, so this one
+// does not ask them to resend a better file.
+export function aiBusyReply(): string {
+  return "I'm having trouble on my side right now. Please send that again in a minute.";
+}
+
 export function budgetReply(): string {
   return "My daily reading limit is used up, so I cannot process this one right now. Please try again tomorrow.";
 }
@@ -161,6 +168,74 @@ export function heardPrefix(transcript: string): string {
   const quoted =
     heard.length > HEARD_PREFIX_MAX_CHARS ? `${heard.slice(0, HEARD_PREFIX_MAX_CHARS)}...` : heard;
   return `I heard: "${quoted}"`;
+}
+
+// Rate limit: the cap number comes from the shared constant so the copy can
+// never drift from the enforcement in limits.ts. The wait is rounded up to
+// whole seconds, singular or plural.
+export function rateLimitReply(retryAfterSeconds: number): string {
+  const seconds = Math.max(1, Math.ceil(retryAfterSeconds));
+  const wait = seconds === 1 ? "1 second" : `${seconds} seconds`;
+  return `I can only take about ${RATE_LIMIT.max} things a minute, so give me ${wait} and send that again.`;
+}
+
+export function tasksEmptyReply(): string {
+  return "You have nothing open. Nice.";
+}
+
+export function tasksMoreLine(hidden: number): string {
+  return `+${hidden} more on your dashboard`;
+}
+
+export function tasksNextHint(): string {
+  return "Reply /done 1 to tick off the first one.";
+}
+
+// One numbered /tasks line. No deadline means no due part at all; an overdue
+// deadline gets a plain marker word inside the brackets.
+export function tasksListLine(
+  index: number,
+  task: { title: string; due_at: string | null },
+  now: Date,
+): string {
+  const due = formatDue(task.due_at);
+  if (due === "no deadline") return `${index}. ${task.title}`;
+  const overdue = Date.parse(task.due_at ?? "") < now.getTime();
+  return `${index}. ${task.title} (due ${due}${overdue ? ", overdue" : ""})`;
+}
+
+export function noUserYetReply(): string {
+  return "Send me something first and I will start your list.";
+}
+
+export function doneMissingReply(): string {
+  return "Tell me which one, like /done 1. Send /tasks to see the numbers.";
+}
+
+export function doneOutOfRangeReply(count: number): string {
+  const noun = count === 1 ? "task" : "tasks";
+  const pronoun = count === 1 ? "it" : "them";
+  return `I only have ${count} open ${noun} right now. Send /tasks to see ${pronoun}.`;
+}
+
+export function doneSuccessReply(
+  done: { title: string; dueAt: string | null },
+  next: { title: string; dueAt: string | null } | null,
+): string {
+  const lines = [`Ticked off: ${done.title}`];
+  if (next != null) {
+    const due = formatDue(next.dueAt);
+    lines.push(due === "no deadline" ? `Next up: ${next.title}` : `Next up: ${next.title} (due ${due})`);
+  }
+  return lines.join("\n");
+}
+
+export function pdfUnreadableReply(): string {
+  return "I couldn't open that PDF. It may need a password or the file may be damaged. Try saving a fresh copy and sending that instead.";
+}
+
+export function commandFailedReply(): string {
+  return "Sorry, something went wrong on my side. Please try that again in a moment.";
 }
 
 const DASHBOARD_PATH = "/dashboard";

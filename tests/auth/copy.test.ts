@@ -33,7 +33,7 @@ describe("auth copy", () => {
 
 describe("/dashboard registration", () => {
   test("dashboard is a known command so the text handler leaves it alone", () => {
-    expect([...KNOWN_COMMANDS].sort()).toEqual(["/dashboard", "/help", "/start"]);
+    expect([...KNOWN_COMMANDS].sort()).toEqual(["/dashboard", "/done", "/help", "/start", "/tasks"]);
   });
 
   test("registerHandlers registers dashboard before the ingest handlers", () => {

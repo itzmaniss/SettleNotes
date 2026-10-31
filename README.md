@@ -114,7 +114,7 @@ All reasoning goes through Meta models. No other AI provider is called anywhere 
 
 ## Testing and evaluation
 
-- `bun test` runs 893 tests across the pipeline, starters, auth, dashboard, billing and bot layers. None of them touch the network or the real database.
+- `bun test` runs 968 tests across the pipeline, starters, auth, dashboard, billing and bot layers. None of them touch the network or the real database.
 - `bun run eval -- understand` is a 13 fixture Singlish eval suite (extend liao, tmr deadlines, duplicates, chit chat, an injection attempt and more). The live run finished 13 of 13.
 - The math eval on real photos of handwritten working has not been run yet; it is the next measurement, as are live checklist and flashcards runs on real PDFs.
 
