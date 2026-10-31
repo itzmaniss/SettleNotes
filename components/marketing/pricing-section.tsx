@@ -164,10 +164,13 @@ export function PricingSection({
                       Get Pro
                     </ChunkButton>
                   ) : (
+                    // Disabled state: the lime card shows through a dashed ink
+                    // outline at full opacity, so it reads as deliberate
+                    // rather than the muddy half ink fill.
                     <ChunkButton
                       tone="ink"
                       disabled
-                      className="mt-8 w-full justify-center"
+                      className="mt-8 w-full justify-center disabled:border-dashed disabled:bg-transparent disabled:text-foreground disabled:opacity-100 disabled:shadow-none"
                     >
                       Coming soon
                     </ChunkButton>

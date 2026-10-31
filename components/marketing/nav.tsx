@@ -29,15 +29,18 @@ export function Nav() {
             Pricing
           </a>
         </nav>
-        <Link
-          href="/login"
-          className="text-sm font-medium whitespace-nowrap underline-offset-4 hover:underline"
-        >
-          Log in
-        </Link>
-        <BotButton href={botLink()} tone="accent" className="text-sm">
-          Open in Telegram
-        </BotButton>
+        {/* Log in belongs beside the primary action, not floating mid gap. */}
+        <div className="flex items-center gap-4">
+          <Link
+            href="/login"
+            className="inline-flex min-h-11 items-center text-sm font-medium whitespace-nowrap underline-offset-4 hover:underline"
+          >
+            Log in
+          </Link>
+          <BotButton href={botLink()} tone="accent" className="text-sm">
+            Open in Telegram
+          </BotButton>
+        </div>
       </div>
     </header>
   );

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import Home, { metadata } from "@/app/page";
 import { botLink } from "@/components/marketing/links";
+import { HowItWorks } from "@/components/marketing/how-it-works";
 import { buildPricingCards } from "@/components/marketing/pricing";
 import { PricingSection } from "@/components/marketing/pricing-section";
 import {
@@ -115,6 +116,20 @@ describe("PricingSection renders from plans config", () => {
     expect(html).not.toContain('href="/billing"');
   });
 
+  test("billing off: the disabled Pro button uses the deliberate dashed style", () => {
+    const html = renderPricing({ billingEnabled: false });
+    expect(html).toMatch(/<button[^>]*\bdisabled\b/);
+    for (const marker of [
+      "disabled:border-dashed",
+      "disabled:bg-transparent",
+      "disabled:text-foreground",
+      "disabled:opacity-100",
+      "disabled:shadow-none",
+    ]) {
+      expect(html).toContain(marker);
+    }
+  });
+
   test("billing on: Pro button is a /billing link with the web payment line", () => {
     const html = renderPricing({
       billingEnabled: true,
@@ -163,6 +178,24 @@ describe("landing page", () => {
     expect(renderPage().match(/<h1\b/g)).toHaveLength(1);
   });
 
+  test("hero intro line is quiet text, not a pill badge", () => {
+    const html = renderPage();
+    expect(html).toMatch(/<p[^>]*>made for SG students<\/p>/);
+    expect(html).not.toMatch(/<span[^>]*>[^<]*made for SG students/);
+  });
+
+  test("nav keeps Log in beside the primary button, with a 44px tap target", () => {
+    setEnv("TELEGRAM_BOT_USERNAME", "settle_bot");
+    const html = renderPage();
+    const group = html.indexOf('<div class="flex items-center gap-4">');
+    const login = html.indexOf("Log in");
+    const button = html.indexOf("Open in Telegram");
+    expect(group).toBeGreaterThan(-1);
+    expect(login).toBeGreaterThan(group);
+    expect(button).toBeGreaterThan(login);
+    expect(html).toContain("min-h-11");
+  });
+
   test("nav links only to sections that exist, no For tutors", () => {
     const html = renderPage();
     expect(html).not.toContain("For tutors");
@@ -184,5 +217,28 @@ describe("landing page", () => {
     expect(metadata.description).toBeTruthy();
     expect(metadata.description).not.toMatch(/[\u2013\u2014]/);
     expect(metadata.openGraph?.title).toBeTruthy();
+  });
+});
+
+describe("HowItWorks hierarchy", () => {
+  function renderHow(): string {
+    return renderToStaticMarkup(<HowItWorks />);
+  }
+
+  test("step 1 leads with a wider column and a large numeral", () => {
+    const html = renderHow();
+    expect(html).toContain("md:grid-cols-[1.3fr_1fr_1fr]");
+    expect(html).toMatch(/text-5xl font-extrabold[^>]*>1</);
+  });
+
+  test("steps 2 and 3 keep the compact sticker numerals, same content order", () => {
+    const html = renderHow();
+    expect(html.match(/rounded-full border-2 border-border/g)).toHaveLength(2);
+    expect(html.indexOf("Forward it")).toBeLessThan(
+      html.indexOf("Settle sorts it")
+    );
+    expect(html.indexOf("Settle sorts it")).toBeLessThan(
+      html.indexOf("Your first step is already done")
+    );
   });
 });

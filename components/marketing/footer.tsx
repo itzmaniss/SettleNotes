@@ -11,7 +11,9 @@ export function Footer() {
         </span>{" "}
         · made in Singapore
       </p>
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-6">
+      {/* Links sit a step above the brand line: 14px so the legal links can
+          meet the 14px accessibility floor while the whole row still matches. */}
+      <div className="flex flex-col gap-1 text-sm sm:flex-row sm:items-center sm:gap-6">
         <nav aria-label="Footer" className="flex flex-wrap gap-x-5">
           <a
             href="#how"

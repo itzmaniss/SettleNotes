@@ -64,9 +64,10 @@ export function Hero() {
   return (
     <section className="mx-auto grid max-w-6xl items-center gap-10 px-4 pb-12 pt-10 sm:px-6 md:grid-cols-[1.1fr_1fr] md:pb-16 md:pt-16">
       <div>
-        <Sticker tone="pop" tilt={-2}>
+        {/* Quiet mono line instead of a pill badge above the headline. */}
+        <p className="font-mono text-sm text-muted-foreground">
           made for SG students
-        </Sticker>
+        </p>
         <h1 className="mt-6 font-display text-[44px] font-extrabold leading-none tracking-tight sm:text-[52px] md:text-[76px]">
           Stop scrolling the grp chat for deadlines.
         </h1>

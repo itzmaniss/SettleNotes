@@ -1,4 +1,5 @@
 import { Chunk, Sticker } from "@/components/settle";
+import { cn } from "@/lib/utils";
 
 const steps = [
   {
@@ -27,14 +28,32 @@ export function HowItWorks() {
       <h2 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
         How it works
       </h2>
-      <div className="mt-8 grid gap-4 md:grid-cols-3">
-        {steps.map((step) => (
-          <Chunk key={step.n} tone="card" className="p-5">
-            <Sticker tone="accent">{step.n}</Sticker>
-            <h3 className="mt-3 font-display font-bold">{step.title}</h3>
-            <p className="mt-1.5 text-sm text-muted-foreground">{step.body}</p>
-          </Chunk>
-        ))}
+      {/* Step 1 leads: a wider column and a large display numeral, while steps
+          2 and 3 keep the compact sticker style. Everything stacks below md. */}
+      <div className="mt-8 grid gap-4 md:grid-cols-[1.3fr_1fr_1fr]">
+        {steps.map((step, index) => {
+          const isLead = index === 0;
+          return (
+            <Chunk key={step.n} tone="card" className={cn("p-5", isLead && "sm:p-6")}>
+              {isLead ? (
+                <span
+                  aria-hidden="true"
+                  className="block font-display text-5xl font-extrabold leading-none"
+                >
+                  {step.n}
+                </span>
+              ) : (
+                <Sticker tone="accent">{step.n}</Sticker>
+              )}
+              <h3
+                className={cn("mt-3 font-display font-bold", isLead && "text-lg")}
+              >
+                {step.title}
+              </h3>
+              <p className="mt-1.5 text-sm text-muted-foreground">{step.body}</p>
+            </Chunk>
+          );
+        })}
       </div>
     </section>
   );

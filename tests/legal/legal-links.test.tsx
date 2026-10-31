@@ -32,6 +32,15 @@ describe("LegalLinks", () => {
     expect(html).toContain("min-h-[44px]");
   });
 
+  test("matches the other footer links: sentence case mono at 14px", () => {
+    const html = render(<LegalLinks />);
+    expect(html).toContain("font-mono");
+    expect(html).toContain("text-sm");
+    expect(html).not.toContain("uppercase");
+    expect(html).not.toContain("tracking-widest");
+    expect(html).not.toContain("text-[11px]");
+  });
+
   test("is server safe: no client directive, no hooks, plain anchors", () => {
     const html = render(<LegalLinks />);
     expect(html).not.toContain("button");
