@@ -4,6 +4,7 @@
 // tells the operator to simply run again; the next run re-lists what is left
 // and finishes the job.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { fetchPaged } from "./query";
 import { allZero, countOwnedRows, nonzeroEntries, type OwnedCounts } from "./counts";
 import { activeSubscriptionBlockers, type SubscriptionBlocker } from "./blockers";
 import { findBillingEventsForUser, scrubBillingEvents } from "./billing-events";
@@ -36,6 +37,10 @@ export type EraseReport = {
   filesRemoved: number;
   eventsMatched: number;
   eventsScrubbed: number;
+  // References to records OUTSIDE this database, captured before the users
+  // row goes, because afterwards nothing links the student to them. Stripe is
+  // never contacted by the erase; the operator decides what to do there.
+  externalRecords: { stripe: string[] };
   message?: string;
 };
 
@@ -70,6 +75,33 @@ async function userRowExists(client: SupabaseClient, userId: string): Promise<bo
   return data != null;
 }
 
+// Pure: the Stripe side references this database stores, which are the
+// subscription ids in subscriptions.provider_ref (sub_...). No customer id
+// column exists anywhere in the schema, and PayNow refs are checkout session
+// ids, not subscriptions.
+export function stripeRefsFromRows(
+  rows: Array<{ provider: string; provider_ref: string }>,
+): string[] {
+  const refs = new Set<string>();
+  for (const row of rows) {
+    if (row.provider_ref.startsWith("sub_")) refs.add(row.provider_ref);
+  }
+  return [...refs];
+}
+
+// Read only: every subscription row of this student, any status. A canceled
+// Stripe subscription still has a Stripe side record, so its id belongs in
+// the report too.
+export async function externalStripeRefs(client: SupabaseClient, userId: string): Promise<string[]> {
+  const rows = await fetchPaged<{ provider: string; provider_ref: string }>(
+    client,
+    "subscriptions",
+    "provider,provider_ref",
+    [{ column: "user_id", op: "eq", value: userId }],
+  );
+  return stripeRefsFromRows(rows);
+}
+
 export async function eraseUser(deps: EraseDeps, args: EraseArgs): Promise<EraseReport> {
   const now = (deps.now ?? (() => new Date()))();
   const completed: EraseStep[] = [];
@@ -89,11 +121,14 @@ export async function eraseUser(deps: EraseDeps, args: EraseArgs): Promise<Erase
       filesRemoved: 0,
       eventsMatched: 0,
       eventsScrubbed: 0,
+      externalRecords: { stripe: [] },
     };
   }
 
-  // Look before touching: counts, files and billing events that would change.
+  // Look before touching: counts, files and billing events that would change,
+  // plus the Stripe references, which MUST be read before the users row goes.
   const before = await countOwnedRows(deps.client, args.userId);
+  const externalRecords = { stripe: await externalStripeRefs(deps.client, args.userId) };
   const filesBefore = await listStoredFiles(deps.storage, deps.bucket, args.userId);
   const events = await findBillingEventsForUser(deps.client, args.userId, {
     telegramUserId: deps.telegramUserId,
@@ -111,6 +146,7 @@ export async function eraseUser(deps: EraseDeps, args: EraseArgs): Promise<Erase
       filesRemoved: 0,
       eventsMatched: events.length,
       eventsScrubbed: 0,
+      externalRecords,
     };
   }
 
@@ -125,6 +161,7 @@ export async function eraseUser(deps: EraseDeps, args: EraseArgs): Promise<Erase
       filesRemoved: 0,
       eventsMatched: events.length,
       eventsScrubbed: 0,
+      externalRecords,
     };
   }
 
@@ -154,6 +191,7 @@ export async function eraseUser(deps: EraseDeps, args: EraseArgs): Promise<Erase
         filesRemoved,
         eventsMatched: events.length,
         eventsScrubbed: scrub.scrubbed,
+        externalRecords,
       },
       cause,
     );
@@ -177,6 +215,7 @@ export async function eraseUser(deps: EraseDeps, args: EraseArgs): Promise<Erase
         filesRemoved: filesBefore.length,
         eventsMatched: events.length,
         eventsScrubbed: scrub.scrubbed,
+        externalRecords,
       },
       cause,
     );
@@ -203,6 +242,7 @@ export async function eraseUser(deps: EraseDeps, args: EraseArgs): Promise<Erase
       filesRemoved: filesBefore.length,
       eventsMatched: events.length,
       eventsScrubbed: scrub.scrubbed,
+      externalRecords,
       message: `verification found rows left over: ${rowsText || "none"}; files left over: ${filesAfter.length}`,
     };
   }
@@ -219,5 +259,6 @@ export async function eraseUser(deps: EraseDeps, args: EraseArgs): Promise<Erase
     filesRemoved: filesBefore.length,
     eventsMatched: events.length,
     eventsScrubbed: scrub.scrubbed,
+    externalRecords,
   };
 }

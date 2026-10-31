@@ -188,13 +188,21 @@ Rotation is configured in the compose file (10 MB per file, 3 files per service)
 
 ## Backups
 
-The data lives in Supabase, not on the VPS. In the Supabase dashboard, Backups shows scheduled backups; paid plans add point-in-time recovery. On the free plan, take a manual dump before big changes:
+The data lives in Supabase, not on the VPS. The Supabase free plan has NO automatic backups (the owner confirmed this for this deployment), so the only copies of the data are the dumps you take by hand:
 
 ```
 pg_dump "$SUPABASE_DB_URL" > settle-backup.sql
 ```
 
 Storage files in the `uploads` bucket are not in `pg_dump`; export them from the Supabase dashboard if the bucket contents matter.
+
+Rules for manual dumps (proposed, confirm with counsel):
+
+- Store the dump outside the repository and outside synced folders (no Dropbox, no iCloud Drive, no Google Drive), with owner only permissions: `chmod 600 settle-backup.sql`.
+- Delete each dump within 30 days.
+- If a dump was kept longer, or a dump was restored, re-apply every erasure request that happened since it was taken, so a deleted student stays deleted.
+
+Two sides to having no backups: an erased account is gone from the live system at once and there is no backup copy left to age out, which is what a student asking for erasure expects. The same fact means nothing can be recovered after a mistake or an outage, so take a fresh dump before risky changes (migrations, bulk edits) and delete it on the schedule above. Where every kind of data lives and how it is removed is written down in `docs/DATA-MAP.md`.
 
 ## Security checklist
 

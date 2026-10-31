@@ -12,10 +12,13 @@ const NEW_FILES = [
   "../../lib/privacy/billing-events.ts",
   "../../lib/privacy/erase.ts",
   "../../lib/privacy/export.ts",
+  "../../lib/privacy/stale.ts",
   "../../scripts/delete-user.ts",
   "../../scripts/export-user.ts",
+  "../../scripts/stale-accounts.ts",
   "../../docs/INCIDENT.md",
   "../../docs/LAUNCH.md",
+  "../../docs/DATA-MAP.md",
   "../../tests/privacy/fake-supabase.ts",
   "../../tests/privacy/fixtures.ts",
   "../../tests/privacy/subject.test.ts",
@@ -28,6 +31,10 @@ const NEW_FILES = [
   "../../tests/privacy/scripts.test.ts",
   "../../tests/privacy/incident-doc.test.ts",
   "../../tests/privacy/launch-sections.test.ts",
+  "../../tests/privacy/stale.test.ts",
+  "../../tests/privacy/external-records.test.ts",
+  "../../tests/privacy/stripe-reminder.test.ts",
+  "../../tests/deploy/compose-logging.test.ts",
 ];
 
 describe("no em or en dashes in any new file", () => {

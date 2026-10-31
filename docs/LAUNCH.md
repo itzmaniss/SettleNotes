@@ -190,7 +190,9 @@ docker compose -f deploy/docker-compose.yml up -d --force-recreate app
 
 ## 11. Handling a data request
 
-A student can ask for a copy of their data, or ask you to delete it. Singapore's PDPA lets them make that request by email; the bot has no self service button for it. The two scripts do the work; this section is the process.
+A student can ask for a copy of their data, or ask you to delete it. Singapore's PDPA lets them make that request by email; the bot has no self service button for it. The two scripts do the work; this section is the process. Where every place data lives, how long it stays and how it is removed is written down in `docs/DATA-MAP.md`; read it once before you handle the first request.
+
+Proposed service levels, clearly marked as proposals until counsel agrees them: acknowledge any data request within 7 days, and complete a verified request within 30 days. Both are proposals, not yet agreed; if you cannot meet one, tell the student when they will get an answer.
 
 - [ ] **[Manager]** Verify the person is who they say they are BEFORE running anything. An email address is not proof. Confirm the request from the Telegram account itself: email the student a one time phrase, send the same phrase to them through the bot from your operator Telegram account, and ask them to reply by email quoting it. Only the person who controls that Telegram account can see the phrase in the bot chat. A dashboard login link sent through the bot works the same way. If they cannot confirm from the Telegram account, stop and do not run the scripts.
 - [ ] **[Manager]** For an access request (a copy of their data):
@@ -208,9 +210,17 @@ bun --env-file=/opt/settle.env run scripts/delete-user.ts --telegram-id <id>
 ```
 
 Read the counts. If they look wrong for this student, stop and check the id again. Then add `--yes` to erase. The script scrubs the payment payloads first, removes the stored files, then deletes the users row so the database cascade removes everything else; `ai_calls` rows are kept but anonymised. Payment rows themselves stay for accounting and dedupe, with identifying fields removed.
+- [ ] **[Manager]** After a successful erase the script lists the Stripe subscription ids it saw and prints the reminder that Stripe keeps its own record for tax and accounting (handle it in the Stripe dashboard only if your accounting rules allow, and note the date), plus the reminder that Telegram keeps its own payment record when the student ever paid with Stars. The erase never contacts Stripe or Telegram itself.
 - [ ] **[Manager]** If the student still has an active subscription the script blocks and tells you what to cancel first: Stripe ones in the Stripe dashboard, Stars ones by the student in Telegram, PayNow ones simply run out. `--force` skips that check, but warn the student first: Stripe or Telegram may still charge them.
-- [ ] **[Manager]** Reply to the student by email when it is done. Reply within a reasonable time: aim for days, and no later than 30 days after the request. If you cannot finish in time, tell them when they will get an answer.
+- [ ] **[Manager]** Reply to the student by email when it is done. Proposed service level: acknowledge the request within 7 days and finish a verified request within 30 days (a proposal; it sits inside the 60 days the draft privacy notice in docs/legal mentions). If you cannot finish in time, tell them when they will get an answer.
 - [ ] **[Manager]** Keep a note of the request date, what you did, and the date you did it, in your own private log. The scripts do not keep one for you.
+- [ ] **[Manager]** Once a quarter (proposed), run the stale account sweep and review the list:
+
+```
+bun --env-file=/opt/settle.env run scripts/stale-accounts.ts --days 365
+```
+
+The sweep is read only. It lists accounts with no activity for the threshold days and no live subscription, with the Telegram id you need for the scripts above. Review each account on the list before doing anything, and never erase an account just because it appears: the list is a prompt to look, not an instruction to erase.
 
 ## 12. Refunds
 

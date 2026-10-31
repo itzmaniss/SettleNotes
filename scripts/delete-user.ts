@@ -20,10 +20,16 @@ import {
   type SubscriptionBlocker,
 } from "../lib/privacy/blockers";
 import { findBillingEventsForUser } from "../lib/privacy/billing-events";
-import { EraseStepError, eraseUser, type EraseReport } from "../lib/privacy/erase";
+import { EraseStepError, eraseUser, externalStripeRefs, type EraseReport } from "../lib/privacy/erase";
 
 export const DELETE_USAGE =
   "Usage: bun run scripts/delete-user.ts --telegram-id <id> [--yes] [--force]";
+
+// Exact reminder shown after a successful erase: the erase never contacts
+// Stripe, and Stripe keeps its own records for tax and accounting.
+export const STRIPE_REMINDER =
+  "Stripe keeps its own record for tax and accounting. If the student asked for it to be removed, handle it in the Stripe dashboard (only if your accounting rules allow) and note the date in your request log.";
+export const STARS_REMINDER = "Telegram keeps its own payment record.";
 
 export type ParsedDeleteArgs =
   | { ok: true; telegramId: number; yes: boolean; force: boolean }
@@ -94,11 +100,12 @@ export async function runDelete(
     throw err;
   }
 
-  const [counts, files, events, blockers] = await Promise.all([
+  const [counts, files, events, blockers, stripeRefs] = await Promise.all([
     countOwnedRows(deps.client, userId),
     listStoredFiles(deps.storage, deps.bucket, userId),
     findBillingEventsForUser(deps.client, userId, { telegramUserId: args.telegramId }),
     activeSubscriptionBlockers(deps.client, userId, new Date()),
+    externalStripeRefs(deps.client, userId),
   ]);
 
   log(`user ${shortId(userId)}`);
@@ -108,6 +115,9 @@ export async function runDelete(
   log(
     `billing events to scrub: ${events.length} (payloads minimised, rows kept for accounting and dedupe)`,
   );
+  if (stripeRefs.length > 0) {
+    log(`Stripe subscription ids on file: ${stripeRefs.join(", ")}`);
+  }
   for (const line of blockerLines(blockers)) log(line);
 
   if (!args.yes) {
@@ -169,6 +179,13 @@ export async function runDelete(
   log(`stored files removed: ${report.filesRemoved}`);
   log(`billing events scrubbed: ${report.eventsScrubbed} (rows kept, payloads minimal)`);
   log("verification: every owned table now counts zero and the storage prefix is empty.");
+  if (report.externalRecords.stripe.length > 0) {
+    log(`Stripe subscription ids the student had: ${report.externalRecords.stripe.join(", ")}.`);
+    log(STRIPE_REMINDER);
+  }
+  if (events.some((event) => event.provider === "stars")) {
+    log(STARS_REMINDER);
+  }
   log("Reply to the student by email so they know the request is done.");
   log("Record the request date and today's date in your own request log.");
   return 0;
