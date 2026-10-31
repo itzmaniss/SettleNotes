@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "bot:poll": "bun run scripts/poll.ts",
-    "eval": "bun run scripts/eval.ts"
+    "eval": "bun run scripts/eval.ts",
+    "seed:demo": "bun run scripts/seed-demo.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

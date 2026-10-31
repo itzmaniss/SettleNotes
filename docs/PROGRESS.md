@@ -2,6 +2,15 @@
 
 Newest entry on top. Each entry: date, card(s), commit(s), gate result, live spend, decisions, next steps.
 
+## 2026-10-31 - Checkpoints
+
+Local git tags (not pushed; `git push origin --tags` would publish them):
+- `day1-final` = `d10a522` "fix: eval matcher ignores unlisted fields; clarify heavy-singlish fixture". Capture loop: T01-T07 plus T06c, live `eval understand` 13/13. (The landing page and design foundation T18/T18a, `319d9dd` to `4cf1431`, were a separate track done right after.)
+- `day2-final` = `2f33d24` "docs: progress log for Day 2 cards". T08-T12 (starters, auth, dashboard), T12b polish, T08w wiring.
+- Later work (T13 weak spots, T19a/b billing seams, `f24c907` onward) is Day 3 / post-hackathon prep.
+
+Roll back to look at a checkpoint without disturbing current work: `git worktree add ../Settle-day1 day1-final` (then `cd ../Settle-day1 && bun install`). Remove with `git worktree remove ../Settle-day1`. Plain `git checkout day2-final` also works on a clean tree; return with `git checkout main`.
+
 ## 2026-10-31 - T13 weak-spot loop, T19a/T19b billing seams
 - Commits (local): `f24c907` T13; `18d9d7a` T19a; T19b committed after this entry. Gate: typecheck, lint, 834 tests, build all green. Also ran the whole suite with `SUPABASE_URL` pointed at a dead address: all 834 still pass and nothing tries to connect, so no test touches the real DB.
 - T13: `scheduleReview` (1st +3 days, 2nd and later +1 day, 3rd+ flagged recurring), due at 23:59 SGT of the target day. `recordWeakSpot` upserts the weak spot, sets next review, and creates ONE open `review` task per weak spot (reschedules instead of duplicating, with an 'updated' event) plus a fresh `review_practice` starter each time. Reply sentences: 1st "I've added a review for <weekday> so this sticks.", 2nd "...for tomorrow so this sticks.", 3rd+ "This one keeps coming up, so I've added a quick review for tomorrow." Wired as the default `onDiagnosisRecorded` in `createStartersDeps`. `/weak-spots` page built (nav no longer 404s).
