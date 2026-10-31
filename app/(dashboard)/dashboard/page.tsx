@@ -2,6 +2,8 @@ import { requireSessionUser } from "@/lib/auth/session";
 import { isBillingEnabled } from "@/lib/billing/flags";
 import { getPlanForUser, periodStart } from "@/lib/billing/entitlements";
 import { countUsage } from "@/lib/billing/queries";
+import { stripeConfigured } from "@/lib/billing/stripe";
+import { env } from "@/lib/env";
 import { scoreTask } from "@/lib/pipeline/priority";
 import {
   listDashboardTasks,
@@ -48,6 +50,7 @@ export default async function DashboardPage() {
   // Plan card only exists while billing is on; with the flag off the dashboard
   // is exactly as before. A missing or broken ledger just hides the card too.
   let planView: PlanView | null = null;
+  let billingOpen = false;
   if (isBillingEnabled()) {
     try {
       const plan = await getPlanForUser(userId);
@@ -66,6 +69,9 @@ export default async function DashboardPage() {
         },
         now,
       });
+      // Checkout exists (T21), so the card links to /billing only when Stripe
+      // is actually wired up in env.
+      billingOpen = stripeConfigured(env);
     } catch {
       planView = null;
     }
@@ -134,7 +140,7 @@ export default async function DashboardPage() {
             <section aria-labelledby="plan-heading">
               <Eyebrow id="plan-heading">Plan</Eyebrow>
               <div className="mt-3">
-                <PlanCard view={planView} />
+                <PlanCard view={planView} billingOpen={billingOpen} />
               </div>
             </section>
           )}

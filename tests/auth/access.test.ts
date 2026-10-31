@@ -15,6 +15,8 @@ describe("decideAccess", () => {
     expect(await decideAccess("/dashboard", null, SECRET, NOW)).toBe("redirect");
     expect(await decideAccess("/dashboard", "", SECRET, NOW)).toBe("redirect");
     expect(await decideAccess("/dashboard", "not-a-jwt", SECRET, NOW)).toBe("redirect");
+    expect(await decideAccess("/billing", undefined, SECRET, NOW)).toBe("redirect");
+    expect(await decideAccess("/billing", "not-a-jwt", SECRET, NOW)).toBe("redirect");
   });
 
   test("a valid session cookie on a protected path allows", async () => {
@@ -22,6 +24,8 @@ describe("decideAccess", () => {
     expect(await decideAccess("/dashboard", token, SECRET, NOW)).toBe("allow");
     expect(await decideAccess("/dashboard/tasks/12", token, SECRET, NOW)).toBe("allow");
     expect(await decideAccess("/weak-spots", token, SECRET, NOW)).toBe("allow");
+    expect(await decideAccess("/billing", token, SECRET, NOW)).toBe("allow");
+    expect(await decideAccess("/billing/", token, SECRET, NOW)).toBe("allow");
   });
 
   test("an expired session redirects", async () => {
@@ -35,6 +39,8 @@ describe("decideAccess", () => {
     expect(await decideAccess("/dashboard", token, undefined, NOW)).toBe("redirect");
     expect(await decideAccess("/dashboard", token, "", NOW)).toBe("redirect");
     expect(await decideAccess("/dashboard", token, "s".repeat(15), NOW)).toBe("redirect");
+    expect(await decideAccess("/billing", token, undefined, NOW)).toBe("redirect");
+    expect(await decideAccess("/billing", token, "s".repeat(15), NOW)).toBe("redirect");
     expect(MIN_SESSION_SECRET_LENGTH).toBe(16);
   });
 

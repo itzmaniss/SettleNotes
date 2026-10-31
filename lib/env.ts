@@ -57,6 +57,13 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  // Stripe (web payments). All optional: a deploy without them starts fine
+  // and /billing simply shows that paid plans are not open yet.
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PRICE_PRO_MONTHLY: z.string().optional(),
+  STRIPE_PRICE_PRO_YEARLY: z.string().optional(),
+  STRIPE_PRICE_PRO_YEARLY_PAYNOW: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

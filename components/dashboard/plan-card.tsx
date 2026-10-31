@@ -2,10 +2,16 @@ import { Chunk, ChunkButton } from "@/components/settle";
 import { usageLine, type PlanView } from "@/lib/dashboard/plan";
 
 // The usage half of the upgrade panel from the brief's T19: what the student
-// used this month and when it resets. Checkout does not exist yet (T21/T22),
-// so the Pro button is a real disabled button reading Coming soon. No prices
-// here: selling happens on the web pricing page, never inside the app.
-export function PlanCard({ view }: { view: PlanView }) {
+// used this month and when it resets. With Stripe configured and billing on
+// the button becomes a link to /billing (T21); otherwise it stays disabled.
+// No prices here: selling happens on /billing and the pricing page.
+export function PlanCard({
+  view,
+  billingOpen = false,
+}: {
+  view: PlanView;
+  billingOpen?: boolean;
+}) {
   return (
     <Chunk className="p-5">
       <p className="font-display text-2xl font-extrabold">{view.planName}</p>
@@ -26,7 +32,13 @@ export function PlanCard({ view }: { view: PlanView }) {
         Resets {view.resetsOn}
       </p>
       <div className="mt-5">
-        <ChunkButton disabled>Coming soon</ChunkButton>
+        {billingOpen ? (
+          <ChunkButton tone="ink" render={<a href="/billing" />}>
+            See plans
+          </ChunkButton>
+        ) : (
+          <ChunkButton disabled>Coming soon</ChunkButton>
+        )}
       </div>
     </Chunk>
   );

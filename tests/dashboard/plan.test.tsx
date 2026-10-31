@@ -105,6 +105,16 @@ describe("PlanCard", () => {
     expect(html).not.toContain("<a "); // no checkout link hiding anywhere
   });
 
+  test("billing open: the button becomes a /billing link", () => {
+    const html = render(<PlanCard view={freeView} billingOpen />);
+    expect(html).toContain("See plans");
+    expect(html).toContain('href="/billing"');
+    expect(html).not.toContain("Coming soon");
+    // The disabled variants in the class list always render; the attribute
+    // must not.
+    expect(html).not.toMatch(/\sdisabled[=\s>]/);
+  });
+
   test("no price numbers anywhere in the markup", () => {
     const html = render(<PlanCard view={freeView} />);
     expect(html).not.toContain("S$");

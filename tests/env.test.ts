@@ -49,6 +49,32 @@ describe("parseEnv", () => {
     expect(() => parseEnv({ ...requiredOnly, BILLING_ENABLED: "yes" })).toThrow("BILLING_ENABLED");
   });
 
+  test("Stripe variables are optional and blank counts as missing", () => {
+    const withoutStripe = parseEnv(requiredOnly);
+    expect(withoutStripe.STRIPE_SECRET_KEY).toBeUndefined();
+    expect(withoutStripe.STRIPE_WEBHOOK_SECRET).toBeUndefined();
+    expect(withoutStripe.STRIPE_PRICE_PRO_MONTHLY).toBeUndefined();
+    expect(withoutStripe.STRIPE_PRICE_PRO_YEARLY).toBeUndefined();
+    expect(withoutStripe.STRIPE_PRICE_PRO_YEARLY_PAYNOW).toBeUndefined();
+
+    const withStripe = parseEnv({
+      ...requiredOnly,
+      STRIPE_SECRET_KEY: "sk_test_123",
+      STRIPE_WEBHOOK_SECRET: "whsec_123",
+      STRIPE_PRICE_PRO_MONTHLY: "price_monthly",
+      STRIPE_PRICE_PRO_YEARLY: "price_yearly",
+      STRIPE_PRICE_PRO_YEARLY_PAYNOW: "price_paynow",
+    });
+    expect(withStripe.STRIPE_SECRET_KEY).toBe("sk_test_123");
+    expect(withStripe.STRIPE_WEBHOOK_SECRET).toBe("whsec_123");
+    expect(withStripe.STRIPE_PRICE_PRO_MONTHLY).toBe("price_monthly");
+    expect(withStripe.STRIPE_PRICE_PRO_YEARLY).toBe("price_yearly");
+    expect(withStripe.STRIPE_PRICE_PRO_YEARLY_PAYNOW).toBe("price_paynow");
+
+    // A whitespace-only value must not be mistaken for a configured key.
+    expect(parseEnv({ ...requiredOnly, STRIPE_SECRET_KEY: "   " }).STRIPE_SECRET_KEY).toBeUndefined();
+  });
+
   test("parses ALLOWED_TELEGRAM_IDS ignoring blanks", () => {
     const env = parseEnv({ ...requiredOnly, ALLOWED_TELEGRAM_IDS: "101, , 202, , " });
     expect(env.ALLOWED_TELEGRAM_IDS).toEqual([101, 202]);

@@ -115,16 +115,23 @@ describe("PricingSection renders from plans config", () => {
     expect(html).not.toContain('href="/billing"');
   });
 
-  test("billing on: Pro button is a /billing link with the payment line", () => {
+  test("billing on: Pro button is a /billing link with the web payment line", () => {
     const html = renderPricing({
       billingEnabled: true,
       botHref: "https://t.me/settle_bot",
     });
     expect(html).toContain("Get Pro");
     expect(html).toContain('href="/billing"');
-    expect(html).toContain("Pay with card or Telegram Stars");
+    expect(html).toContain("Subscribe on the web with a card or PayNow.");
     expect(html).not.toContain("Coming soon");
     expect(html).toContain('href="https://t.me/settle_bot"');
+  });
+
+  test("no Stars number and no bot upsell next to the Pro button", () => {
+    const html = renderPricing({ billingEnabled: true, botHref: "https://t.me/settle_bot" });
+    // Selling happens on the web; the bot mention stays neutral and numberless.
+    expect(html).not.toContain("Stars");
+    expect(html).not.toMatch(/600/);
   });
 
   test("anchor sticker renders only when the plan has one", () => {

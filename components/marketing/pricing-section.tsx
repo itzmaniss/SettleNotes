@@ -8,6 +8,7 @@ import {
   Sticker,
 } from "@/components/settle";
 import type { PlanId } from "@/lib/billing/plans";
+import { WEB_NUDGE_LINE } from "@/lib/billing/web-copy";
 import { cn } from "@/lib/utils";
 import { BotButton } from "./bot-button";
 
@@ -173,7 +174,7 @@ export function PricingSection({
                   )}
                   {billingEnabled && (
                     <p className="mt-3 text-center text-xs text-accent-foreground">
-                      Pay with card or Telegram Stars.
+                      {WEB_NUDGE_LINE}
                     </p>
                   )}
                 </>

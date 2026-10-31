@@ -4,7 +4,7 @@ import { SESSION_COOKIE } from "@/lib/auth/jwt";
 import { EXPIRED_PATH } from "@/lib/auth/paths";
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/tasks/:path*", "/weak-spots/:path*"],
+  matcher: ["/dashboard/:path*", "/tasks/:path*", "/weak-spots/:path*", "/billing/:path*"],
 };
 
 export async function middleware(request: NextRequest): Promise<NextResponse> {

@@ -33,6 +33,11 @@ All configuration is runtime env, read from one file. Nothing secret goes into t
 | SESSION_SECRET | yes | Signs dashboard session cookies. Generate with `openssl rand -hex 32`. |
 | APP_BASE_URL | yes | The public https URL, `https://settle.example.com`. Used in magic links and webhook registration. The script refuses localhost and non-https. |
 | BILLING_ENABLED | no | Keep `false` until the launch switch; with false everyone is treated as Pro. |
+| STRIPE_SECRET_KEY | no | Stripe secret key. Test mode first (`sk_test_...`). Blank keeps `/billing` closed. |
+| STRIPE_WEBHOOK_SECRET | no | Signing secret (`whsec_...`) of the `/api/stripe/webhook` endpoint. |
+| STRIPE_PRICE_PRO_MONTHLY | no | Recurring monthly price id for Pro. |
+| STRIPE_PRICE_PRO_YEARLY | no | Recurring yearly price id for Pro. |
+| STRIPE_PRICE_PRO_YEARLY_PAYNOW | no | One-time yearly price id; enables the PayNow button on `/billing`. |
 
 Generate the two secrets:
 
@@ -197,6 +202,46 @@ Storage files in the `uploads` bucket are not in `pg_dump`; export them from the
 - `META_DAILY_BUDGET_USD` stays set so a runaway loop cannot spend.
 - `BILLING_ENABLED` stays `false` until the launch switch.
 - No secrets in the image: the build takes no arguments and the final stage copies only the built output.
+
+## Stripe (web payments, test mode first)
+
+Settle sells Pro on the website through Stripe Checkout; Telegram Stars covers the bot. Nothing here charges real money until you switch to live keys. All five variables are optional: with any of them blank, `/billing` shows that paid plans are not open yet and nothing can be bought. The code is identical for test and live; only the env values change.
+
+### One-time setup in the Stripe dashboard (test mode)
+
+1. Log in to [dashboard.stripe.com](https://dashboard.stripe.com) with test mode on (the toggle sits next to the search box).
+2. Product catalogue, add a product `Settle Pro` with two recurring prices in SGD:
+   - `7.99` per month, and
+   - `63.99` per year.
+   Copy both price ids (they start with `price_`). They go into `STRIPE_PRICE_PRO_MONTHLY` and `STRIPE_PRICE_PRO_YEARLY`.
+3. For PayNow, add a one-time price on the same product: `63.99`, one time (no recurring). Copy its price id into `STRIPE_PRICE_PRO_YEARLY_PAYNOW`. PayNow cannot recur, so the web page offers the yearly plan as a single charge. Leave the variable blank to hide the PayNow button.
+4. Developers, Webhooks, add an endpoint with URL `https://<domain>/api/stripe/webhook` and exactly these events:
+   - `checkout.session.completed`
+   - `customer.subscription.updated`
+   - `customer.subscription.deleted`
+   - `invoice.payment_failed`
+   Copy the signing secret (`whsec_...`) into `STRIPE_WEBHOOK_SECRET`.
+5. Copy the test secret key (`sk_test_...`) into `STRIPE_SECRET_KEY`.
+
+While the secret key starts with `sk_test_`, `/billing` shows a small "Test mode, no real charges" sticker. Test cards: `4242 4242 4242 4242` succeeds; PayNow test sessions show a QR that can be simulated from the Stripe dashboard.
+
+### Local testing without a public URL
+
+`stripe listen` forwards Stripe events to localhost and prints a per-run signing secret:
+
+```
+stripe listen --forward-to localhost:3000/api/stripe/webhook
+# copy the whsec_... it prints into STRIPE_WEBHOOK_SECRET, then restart the app
+stripe trigger checkout.session.completed
+```
+
+Use `APP_BASE_URL=http://localhost:3000` locally; the success and cancel redirects come from it.
+
+### Switching to live
+
+When you are ready to charge for real: activate your Stripe account, flip the dashboard to live mode, create the same product and prices there, add a live webhook endpoint with the same four events, then replace all five env values (`sk_live_...`, the live `whsec_...`, the live price ids) in the server env file and restart the container. No code changes.
+
+The webhook needs the raw request body, so do not put a transforming proxy between Caddy and the app.
 
 ## Note on Vercel
 

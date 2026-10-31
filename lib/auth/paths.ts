@@ -1,7 +1,7 @@
 // Route shapes the dashboard auth lives on. Pure constants and matching, so
 // middleware, node code and tests all share one definition.
 
-export const PROTECTED_PREFIXES = ["/dashboard", "/tasks", "/weak-spots"];
+export const PROTECTED_PREFIXES = ["/dashboard", "/tasks", "/weak-spots", "/billing"];
 export const POST_LOGIN_PATH = "/dashboard";
 export const EXPIRED_PATH = "/auth/expired";
 

@@ -7,10 +7,22 @@
 import "server-only";
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/db/client";
-import type { StarsSubscriptionUpsert } from "./stars";
 
 export type SubscriptionProvider = "stars" | "stripe" | "manual";
 export type SubscriptionStatus = "active" | "canceled" | "past_due";
+
+// Widened from StarsSubscriptionUpsert so the Stripe webhook (T21) can reuse
+// the same upsert: provider takes any subscription provider, the status can
+// move to past_due or canceled, and the period end may be unknown (null, the
+// column is nullable). The Stars row type stays assignable as is.
+export type UpsertSubscriptionInput = {
+  userId: string;
+  provider: SubscriptionProvider;
+  providerRef: string;
+  plan: "pro";
+  status: SubscriptionStatus;
+  currentPeriodEnd: Date | null;
+};
 
 export type SubscriptionRow = {
   id: string;
@@ -23,8 +35,6 @@ export type SubscriptionRow = {
   created_at: string;
   updated_at: string;
 };
-
-export type UpsertSubscriptionInput = StarsSubscriptionUpsert;
 
 export type RecordBillingEventInput = {
   id: string;
@@ -62,7 +72,7 @@ export function createSubscriptionsQueries(client: SupabaseClient) {
     // but unique(provider, provider_ref) still blocks duplicate charge rows
     // and the charge-level billing_events dedupe runs before this.
     async upsertSubscription(i: UpsertSubscriptionInput): Promise<void> {
-      const periodEnd = i.currentPeriodEnd.toISOString();
+      const periodEnd = i.currentPeriodEnd?.toISOString() ?? null;
       const { data, error } = await client
         .from("subscriptions")
         .update({

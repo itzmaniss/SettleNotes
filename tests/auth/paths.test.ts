@@ -20,6 +20,10 @@ describe("isProtectedPath", () => {
       ["/weak-spots", true],
       ["/weak-spots/w-1", true],
       ["/weak-spotsies", false],
+      ["/billing", true],
+      ["/billing/", true],
+      ["/billing/invoice-1", true],
+      ["/billingpage", false],
       ["/", false],
       ["", false],
       ["/api/telegram", false],
@@ -34,6 +38,6 @@ describe("isProtectedPath", () => {
   test("constants match the spec", () => {
     expect(POST_LOGIN_PATH).toBe("/dashboard");
     expect(EXPIRED_PATH).toBe("/auth/expired");
-    expect(PROTECTED_PREFIXES).toEqual(["/dashboard", "/tasks", "/weak-spots"]);
+    expect(PROTECTED_PREFIXES).toEqual(["/dashboard", "/tasks", "/weak-spots", "/billing"]);
   });
 });
