@@ -17,6 +17,7 @@ import { getMetaClient } from "@/lib/meta/index";
 import { generateStarterFor } from "@/lib/starters/index";
 import { diagnoseAndAnnotate } from "@/lib/starters/math";
 import { MATH_TOPIC_LABELS, type MathDiagnosis } from "@/lib/starters/types";
+import { createDiagnosisRecorder } from "@/lib/weakspots/record";
 
 export type DiagnosisRecordedInfo = {
   user: UserRow;
@@ -44,6 +45,10 @@ export function createStartersDeps(overrides: Partial<StartersDeps> = {}): Start
     insertStarter: realInsertStarter,
     uploadBuffer: (path, buffer, contentType) => realUploadBuffer(path, buffer, contentType),
     now: () => new Date(),
+    // The weak-spot loop (PRD F4). The recorder builds itself at call time
+    // and its db wrappers resolve the client inside their bodies, so nothing
+    // here touches the environment until a diagnosis actually lands.
+    onDiagnosisRecorded: (info) => createDiagnosisRecorder()(info),
     ...overrides,
   };
 }

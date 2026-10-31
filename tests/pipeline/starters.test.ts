@@ -8,6 +8,7 @@ import { executeOps } from "../../lib/pipeline/execute";
 import { createIngestDeps, ingestContent, type IngestDeps, type IngestInput } from "../../lib/pipeline/ingest";
 import {
   attachDocumentStarter,
+  createStartersDeps,
   runMathDiagnosis,
   titleFromFilename,
   type StartersDeps,
@@ -548,6 +549,15 @@ describe("runMathDiagnosis", () => {
     expect(result.status).toBe("wrong");
     expect(result.outcome.extra).toBeNull();
     expect(fake.starters).toHaveLength(1); // the starter write survived the hook
+  });
+});
+
+describe("createStartersDeps", () => {
+  test("onDiagnosisRecorded defaults to the real weak-spot recorder and overrides win", () => {
+    const deps = createStartersDeps();
+    expect(typeof deps.onDiagnosisRecorded).toBe("function");
+    const custom = async () => "custom line";
+    expect(createStartersDeps({ onDiagnosisRecorded: custom }).onDiagnosisRecorded).toBe(custom);
   });
 });
 
