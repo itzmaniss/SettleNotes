@@ -1,0 +1,31 @@
+# Version control and agent/editor state
+.git
+.gitignore
+.claude
+.agents
+
+# Local installs and build output: rebuilt inside the image
+node_modules
+.next
+tsconfig.tsbuildinfo
+
+# Secrets: never in the build context, never in an image
+.env
+.env.*
+**/.env
+**/.env.*
+**/*.env
+!.env.example
+!**/.env.example
+
+# Docs, design shots, tests and scratch output: not needed to build
+docs
+README.md
+AGENTS.md
+CLAUDE.md
+IDEA.md
+plan.md
+report.md
+shots
+coverage
+*.log

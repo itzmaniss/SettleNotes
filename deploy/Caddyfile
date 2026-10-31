@@ -1,0 +1,8 @@
+# Caddy terminates TLS and proxies to the app container over the compose
+# network. Replace settle.example.com with your hostname; Caddy fetches and
+# renews the certificate automatically once DNS points at the server and
+# ports 80 and 443 are reachable.
+settle.example.com {
+    encode zstd gzip
+    reverse_proxy app:3000
+}
