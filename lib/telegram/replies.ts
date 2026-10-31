@@ -3,6 +3,7 @@
 // anywhere in this file: students read every string here.
 import { InlineKeyboard } from "grammy";
 import { RATE_LIMIT } from "@/lib/telegram/limits";
+import { REFUND_WINDOW_DAYS } from "@/lib/billing/stars";
 import type { PendingActionKind } from "@/lib/clarify/types";
 import type { ExecuteResult } from "@/lib/pipeline/execute";
 import type { StarterReplyInfo } from "@/lib/pipeline/starters";
@@ -257,6 +258,51 @@ export function dashboardKeyboard(appBaseUrl: string): InlineKeyboard | undefine
   if (base.protocol !== "https:" || LOOPBACK_HOSTS.has(hostname)) return undefined;
   const url = `${base.href.replace(/\/+$/, "")}${DASHBOARD_PATH}`;
   return new InlineKeyboard().url("Open dashboard", url);
+}
+
+// ---- Pro subscription (Telegram Stars) -------------------------------------
+// Telegram policy: inside the bot, Stars is the only purchase path we may
+// talk about. These strings never mention the website, Stripe, discounts or
+// fiat prices, and the only number in the /pro offer is the Stars amount
+// handed in by the caller, which comes from PLANS.pro.price.stars.
+
+export function proNotOnSaleReply(): string {
+  return "Pro is not on sale yet. I will let you know when it is.";
+}
+
+export function proInvoiceReply(starsPerMonth: number): string {
+  return `Pro is ${starsPerMonth} Stars a month for unlimited math checks, brief checklists and flashcards. Tap the button below to pay.`;
+}
+
+export function proInvoiceKeyboard(invoiceUrl: string): InlineKeyboard {
+  return new InlineKeyboard().url("Pay with Stars", invoiceUrl);
+}
+
+export function proActivatedReply(currentPeriodEnd: Date): string {
+  return `Pro is on. It runs until ${formatDue(currentPeriodEnd.toISOString())}. Thanks for backing Settle.`;
+}
+
+export function proActiveReply(currentPeriodEnd: Date | null): string {
+  const until =
+    currentPeriodEnd == null ? "" : ` It runs until ${formatDue(currentPeriodEnd.toISOString())}.`;
+  return `Pro is already on.${until} Thanks for backing Settle!`;
+}
+
+const PAY_SUPPORT_TEMPLATE =
+  "Need help with a payment? Message the person who runs this bot and include your Telegram username and what went wrong. Refunds for the first {days} days are given on request.";
+
+export function paySupportReply(): string {
+  return PAY_SUPPORT_TEMPLATE.replace("{days}", String(REFUND_WINDOW_DAYS));
+}
+
+// Shown when a pre-checkout cannot even be checked (internal error) or when
+// a payer outside the allowlist tries to buy: always with the reassurance
+// that nothing was charged.
+export const PRE_CHECKOUT_CLOSED_REPLY =
+  "Settle is in private testing right now, so checkout is not open. Come back soon.";
+
+export function preCheckoutErrorReply(): string {
+  return "I could not check this purchase in time, so it was stopped. You have not been charged. Please send /pro again in a moment.";
 }
 
 // ---- Low-confidence clarifications: one prompt message with Yes/No buttons,

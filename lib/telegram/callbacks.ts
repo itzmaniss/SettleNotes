@@ -22,9 +22,14 @@ import { executeOps as realExecuteOps } from "@/lib/pipeline/execute";
 import type { ExecuteDeps } from "@/lib/pipeline/execute";
 
 // Both entry points (webhook and long polling) must ask Telegram to deliver
-// callback_query updates, or the Yes/No buttons render but every tap goes
-// nowhere. Exported so the scripts share one list and tests can pin it.
-export const TELEGRAM_ALLOWED_UPDATES = ["message", "callback_query"] as const;
+// callback_query and pre_checkout_query updates, or the Yes/No buttons render
+// but every tap goes nowhere and Stars checkouts never arrive. Exported so
+// the scripts share one list and tests can pin it.
+export const TELEGRAM_ALLOWED_UPDATES = [
+  "message",
+  "callback_query",
+  "pre_checkout_query",
+] as const;
 
 // Minimal structural view of a grammY callback context, so tests pass tiny
 // fakes instead of building a real Bot (same idea as BotContextLike).

@@ -50,7 +50,7 @@ export const PLANS: Record<PlanId, Plan> = {
       monthly: 7.99,
       yearly: 63.99,
       currency: "SGD",
-      stars: null,
+      stars: { monthly: 600 },
       anchor: "Less than a McSpicy meal.",
     },
     quotas: {

@@ -3,6 +3,7 @@ import { env } from "@/lib/env";
 import { markUpdateSeen } from "@/lib/db/queries";
 import { ensureBotReady } from "@/lib/telegram/bot";
 import { handleWebhook } from "@/lib/telegram/guards";
+import { PRE_CHECKOUT_CLOSED_REPLY } from "@/lib/telegram/replies";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -25,6 +26,12 @@ export async function POST(req: Request): Promise<Response> {
     sendRefusal: async (chatId) => {
       const bot = await ensureBotReady();
       await bot.api.sendMessage(chatId, REFUSAL_TEXT);
+    },
+    answerPreCheckoutRefusal: async (queryId) => {
+      const bot = await ensureBotReady();
+      await bot.api.answerPreCheckoutQuery(queryId, false, {
+        error_message: PRE_CHECKOUT_CLOSED_REPLY,
+      });
     },
   });
 }

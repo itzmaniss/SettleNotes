@@ -15,6 +15,12 @@ export type WebhookDeps = {
   schedule: (fn: () => Promise<unknown>) => void;
   handleUpdate: (update: Update) => Promise<void>;
   sendRefusal: (chatId: number) => Promise<void>;
+  /**
+   * Stars checkouts: a pre_checkout_query has no chat to refuse in and must
+   * be answered within 10 seconds, so a payer outside the allowlist gets
+   * answered false inline instead of a refusal message.
+   */
+  answerPreCheckoutRefusal?: (queryId: string) => Promise<void>;
 };
 
 const SECRET_HEADER = "x-telegram-bot-api-secret-token";
@@ -38,9 +44,11 @@ export function isAllowedUser(
   return allowed.includes(telegramUserId);
 }
 
-/** Sender id for the two update types we accept; undefined for channel posts etc. */
+/** Sender id for the update types we accept; undefined for channel posts etc. */
 export function senderIdOf(update: Update): number | undefined {
-  return update.message?.from?.id ?? update.callback_query?.from.id;
+  return (
+    update.message?.from?.id ?? update.callback_query?.from.id ?? update.pre_checkout_query?.from.id
+  );
 }
 
 /** Where to reply: the message chat, else the callback's message chat, else the sender. */
@@ -95,6 +103,14 @@ export async function handleWebhook(
   }
 
   if (!isAllowedUser(senderId, deps.allowedIds)) {
+    if (update.pre_checkout_query !== undefined) {
+      // Answered inline and before the 200 so the payer's checkout never
+      // hangs out the full 10 seconds.
+      if (deps.answerPreCheckoutRefusal !== undefined) {
+        await deps.answerPreCheckoutRefusal(update.pre_checkout_query.id);
+      }
+      return new Response("OK", { status: 200 });
+    }
     const chatId = chatIdOf(update);
     if (chatId !== undefined) {
       deps.schedule(runQuietly("refusal", () => deps.sendRefusal(chatId)));

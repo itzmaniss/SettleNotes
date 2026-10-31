@@ -37,10 +37,11 @@ describe("0003_pending_actions.sql", () => {
 });
 
 describe("Telegram allowed updates", () => {
-  test("both message and callback_query are requested", () => {
+  test("message, callback_query and pre_checkout_query are requested", () => {
     expect([...TELEGRAM_ALLOWED_UPDATES]).toContain("message");
     expect([...TELEGRAM_ALLOWED_UPDATES]).toContain("callback_query");
-    expect(TELEGRAM_ALLOWED_UPDATES).toHaveLength(2);
+    expect([...TELEGRAM_ALLOWED_UPDATES]).toContain("pre_checkout_query");
+    expect(TELEGRAM_ALLOWED_UPDATES).toHaveLength(3);
   });
 
   test("both entry points ask for the shared list, so callback_query really arrives", () => {

@@ -10,7 +10,8 @@ import {
 import { upsertUser } from "@/lib/db/queries";
 import { createPendingActionCallback, type CallbackContextLike } from "@/lib/telegram/callbacks";
 import { allowlistMiddleware, registerIngestHandlers } from "@/lib/telegram/handlers";
-import { REFUSAL_TEXT } from "@/lib/telegram/replies";
+import { registerPaymentHandlers } from "@/lib/telegram/payments";
+import { PRE_CHECKOUT_CLOSED_REPLY, REFUSAL_TEXT } from "@/lib/telegram/replies";
 
 // The token is only read when getBot() first runs, never at import time, so
 // `next build` and the test runner never need env vars just to import this.
@@ -44,8 +45,15 @@ function createBot(): Bot {
   // Very first middleware: the poll script runs this bot without the webhook
   // route's guards, so the allowlist has to live on the bot itself.
   bot.use(
-    allowlistMiddleware(env.ALLOWED_TELEGRAM_IDS, (chatId) =>
-      bot.api.sendMessage(chatId, REFUSAL_TEXT),
+    allowlistMiddleware(
+      env.ALLOWED_TELEGRAM_IDS,
+      (chatId) => bot.api.sendMessage(chatId, REFUSAL_TEXT),
+      // A stranger's checkout must still be answered, or Telegram spins for
+      // ten seconds and then fails it with a generic error.
+      (queryId) =>
+        bot.api.answerPreCheckoutQuery(queryId, false, {
+          error_message: PRE_CHECKOUT_CLOSED_REPLY,
+        }),
     ),
   );
   registerHandlers(bot);
@@ -92,6 +100,11 @@ export function registerHandlers(bot: Bot): void {
     pendingActionCallback(ctx as unknown as CallbackContextLike),
   );
 
+  // /pro, /paysupport, pre_checkout_query and successful_payment. Registered
+  // before the ingest handlers so a payment message never reaches the
+  // catch-all "message" handler.
+  registerPaymentHandlers(bot);
+
   registerIngestHandlers(bot);
 }
 
@@ -122,4 +135,6 @@ export const HELP_TEXT = [
   "/tasks - show the five things to handle first",
   "/done <n> - tick one off by its number, like /done 1",
   "/dashboard - get a single use link to open your dashboard",
+  "/pro - see Settle Pro and pay with Telegram Stars",
+  "/paysupport - help with a payment or a refund",
 ].join("\n");

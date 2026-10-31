@@ -62,7 +62,7 @@ describe("PLANS shape", () => {
     expect(pro.price.monthly).toBe(7.99);
     expect(pro.price.yearly).toBe(63.99);
     expect(pro.price.currency).toBe("SGD");
-    expect(pro.price.stars).toBeNull();
+    expect(pro.price.stars).toEqual({ monthly: 600 });
     expect(typeof pro.price.anchor).toBe("string");
     expect(Object.values(pro.quotas).every((q) => q === "unlimited")).toBe(true);
     expect(pro.fairUse).toEqual({

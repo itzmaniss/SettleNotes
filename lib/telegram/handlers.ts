@@ -123,7 +123,15 @@ export function createHandlerDeps(): HandlerDeps {
   return deps;
 }
 
-export const KNOWN_COMMANDS = new Set(["/start", "/help", "/dashboard", "/tasks", "/done"]);
+export const KNOWN_COMMANDS = new Set([
+  "/start",
+  "/help",
+  "/dashboard",
+  "/tasks",
+  "/done",
+  "/pro",
+  "/paysupport",
+]);
 const DEFAULT_TYPING_INTERVAL_MS = 4_000;
 const MAX_STORED_ERROR_LENGTH = 300;
 
@@ -545,15 +553,25 @@ function shortError(error: unknown, botToken: string): string {
  * refusal reply once and never reaches the handlers. Needed because
  * scripts/poll.ts runs this bot without the webhook route's guards, and any
  * stranger finding the dev bot could otherwise spend Meta credits.
+ *
+ * answerPreCheckout (optional) covers the payment case: a pre_checkout_query
+ * has no chat to refuse in, and leaving it unanswered would hang the payer's
+ * checkout for ten seconds before Telegram fails it, so a stranger's query is
+ * answered false with a friendly message instead.
  */
 export function allowlistMiddleware(
   allowed: number[],
   refuse: (chatId: number) => Promise<unknown>,
+  answerPreCheckout?: (queryId: string) => Promise<unknown>,
 ) {
   return async (ctx: Context, next: NextFunction): Promise<void> => {
     const senderId = ctx.from?.id;
     if (senderId === undefined) return; // no sender to allowlist: ignore
     if (isAllowedUser(senderId, allowed)) return next();
+    if (ctx.preCheckoutQuery !== undefined) {
+      if (answerPreCheckout !== undefined) await answerPreCheckout(ctx.preCheckoutQuery.id);
+      return;
+    }
     const chatId = ctx.chat?.id;
     if (chatId !== undefined) await refuse(chatId);
   };
