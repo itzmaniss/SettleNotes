@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Logo } from "@/components/settle";
 import { BotButton } from "./bot-button";
 import { botLink } from "./links";
 
@@ -8,8 +9,9 @@ export function Nav() {
       <div className="flex items-center justify-between gap-3 rounded-full border-2 border-border bg-card py-2 pl-5 pr-2">
         <Link
           href="/"
-          className="font-display text-xl font-extrabold tracking-tight"
+          className="inline-flex items-center gap-2 font-display text-xl font-extrabold tracking-tight"
         >
+          <Logo size={26} />
           settle
         </Link>
         <nav

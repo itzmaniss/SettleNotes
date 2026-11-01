@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>Settle</title>
+  <!-- Favicon variant of public/brand/settle-mark.svg: no spark, scaled to fill
+       about 90 percent of the canvas with heavier strokes so it reads at 16 px. -->
+  <path d="M136.3 65.62H327.82A82.08 82.08 0 0 1 409.9 147.7V293.62A82.08 82.08 0 0 1 327.82 375.7H191.02L90.7 439.54L108.23 370.75A82.08 82.08 0 0 1 54.22 293.62V147.7A82.08 82.08 0 0 1 136.3 65.62Z" transform="translate(28 28)" fill="#12161F"/>
+  <path d="M136.3 65.62H327.82A82.08 82.08 0 0 1 409.9 147.7V293.62A82.08 82.08 0 0 1 327.82 375.7H191.02L90.7 439.54L108.23 370.75A82.08 82.08 0 0 1 54.22 293.62V147.7A82.08 82.08 0 0 1 136.3 65.62Z" fill="#C1F354"/>
+  <path d="M136.3 65.62H327.82A82.08 82.08 0 0 1 409.9 147.7V293.62A82.08 82.08 0 0 1 327.82 375.7H191.02L90.7 439.54L108.23 370.75A82.08 82.08 0 0 1 54.22 293.62V147.7A82.08 82.08 0 0 1 136.3 65.62Z" fill="none" stroke="#12161F" stroke-width="28" stroke-linejoin="round"/>
+  <path d="M145.42 225.22L222.94 302.74L437.26 61.06" fill="none" stroke="#12161F" stroke-width="64" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

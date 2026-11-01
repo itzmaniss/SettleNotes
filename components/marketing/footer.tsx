@@ -1,3 +1,4 @@
+import { Logo } from "@/components/settle";
 import { botLink } from "./links";
 import { LegalLinks } from "@/components/legal/legal-links";
 
@@ -6,8 +7,11 @@ export function Footer() {
   return (
     <footer className="mx-auto flex w-full max-w-6xl flex-col gap-1 px-4 py-10 font-mono text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6">
       <p>
-        <span className="font-display text-sm font-extrabold text-foreground">
-          settle
+        <span className="inline-flex items-center gap-1.5 align-middle">
+          <Logo size={20} />
+          <span className="font-display text-sm font-extrabold text-foreground">
+            settle
+          </span>
         </span>{" "}
         · made in Singapore
       </p>

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>Settle</title>
+  <!-- Layers: ink shadow (same silhouette translated), lime fill, ink outline, tick, spark. -->
+  <path d="M156 104H324A72 72 0 0 1 396 176V304A72 72 0 0 1 324 376H204L116 432L131.38 371.66A72 72 0 0 1 84 304V176A72 72 0 0 1 156 104Z" transform="translate(24 24)" fill="#12161F"/>
+  <path d="M156 104H324A72 72 0 0 1 396 176V304A72 72 0 0 1 324 376H204L116 432L131.38 371.66A72 72 0 0 1 84 304V176A72 72 0 0 1 156 104Z" fill="#C1F354"/>
+  <path d="M156 104H324A72 72 0 0 1 396 176V304A72 72 0 0 1 324 376H204L116 432L131.38 371.66A72 72 0 0 1 84 304V176A72 72 0 0 1 156 104Z" fill="none" stroke="#12161F" stroke-width="20" stroke-linejoin="round"/>
+  <path d="M164 244L232 312L420 100" fill="none" stroke="#12161F" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="392,60 376.3,63.4 385,77 371.4,68.3 368,84 364.6,68.3 351,77 359.7,63.4 344,60 359.7,56.6 351,43 364.6,51.7 368,36 371.4,51.7 385,43 376.3,56.6" fill="#B78CF2"/>
+</svg>
