@@ -50,7 +50,8 @@ Every other occurrence of the numbers 7.99 and 63.99 in the repo is tests, docs 
 1. In the Stripe dashboard, open Settings, then Managed Payments, enable it and accept its terms.
 2. Wait for Stripe's eligibility review of the account. Nothing to do but wait; the flag stays off until this passes.
 3. Edit the product and pick a tax code labelled "Eligible for Managed Payments". The code currently on the test product, `txcd_10203000`, may not be eligible: check the label shown in the dashboard and change it if it is not eligible.
-4. Decide tax behavior. By default Stripe adds tax on top of the price, so a student could pay more than the number on the website. Decide whether the S$7.99 on the website should be exactly what a student pays; if so, set the prices or the dashboard setting to tax inclusive, and remember that including tax lowers what you keep.
+4. Tax behavior. Decided by the owner on 1 November: prices are tax inclusive, so the price on the website is exactly what a student pays and any tax comes out of the owner's share. Set it in the Stripe dashboard (Settings, then Tax, then "Include tax in prices") in test mode first, then again in live mode, because Stripe adds tax on top of the price by default when nothing is set. The owner will adjust the prices after test mode if the margin is too thin.
+   Also fix the product tax code: `txcd_10203000` is not on Stripe's Managed Payments list. Pick "Software as a service (SaaS) - personal use" (`txcd_10103000`, labelled eligible) on the product, which covers both prices.
 5. In the dashboard, configure the checkout Terms and Privacy links and the customer portal for these subscriptions.
 6. Set `STRIPE_MANAGED_PAYMENTS=true` on the server and restart the app.
 7. Test in test mode with card `4242 4242 4242 4242`, from a few different billing countries, and check the subscriptions row, the Manage subscription button and a cancellation each time.

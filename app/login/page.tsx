@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { Chunk, Sticker } from "@/components/settle";
+import { Chunk, Logo, Sticker } from "@/components/settle";
 import { LegalLinks } from "@/components/legal/legal-links";
 import { TelegramLoginButton } from "@/components/auth/telegram-login-button";
 import { getSessionUser } from "@/lib/auth/session";
@@ -34,7 +34,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-12">
       <Chunk tone="card" className="w-full max-w-md p-6 text-center sm:p-8">
-        <Sticker tone="accent" tilt={2}>
+        <Logo size={44} />
+        <Sticker tone="accent" tilt={2} className="mt-5">
           log in
         </Sticker>
         <h1 className="mt-5 font-display text-2xl font-bold sm:text-3xl">Log in to Settle</h1>

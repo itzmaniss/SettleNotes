@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Chunk, Sticker } from "@/components/settle";
+import { Chunk, Logo, Sticker } from "@/components/settle";
 import { EXPIRED_PAGE_BODY, EXPIRED_PAGE_HINT, EXPIRED_PAGE_TITLE } from "@/lib/auth/copy";
 
 export const metadata: Metadata = {
@@ -12,7 +12,8 @@ export default function ExpiredPage() {
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-12">
       <Chunk tone="card" className="w-full max-w-md p-6 text-center sm:p-8">
-        <Sticker tone="pop" tilt={-2}>
+        <Logo size={40} />
+        <Sticker tone="pop" tilt={-2} className="mt-5">
           link expired
         </Sticker>
         <h1 className="mt-5 font-display text-2xl font-bold sm:text-3xl">{EXPIRED_PAGE_TITLE}</h1>

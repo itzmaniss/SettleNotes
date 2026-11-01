@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { Chunk, ChunkButton, Sticker } from "@/components/settle";
+import { Chunk, ChunkButton, Logo, Sticker } from "@/components/settle";
 import { LegalLinks } from "@/components/legal/legal-links";
 import { acceptAgree } from "./actions";
 import { resolveAcceptVisitor, realAcceptDeps } from "@/lib/auth/accept";
@@ -38,7 +38,8 @@ export default async function AcceptPage({ searchParams }: AcceptPageProps) {
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-12">
       <Chunk tone="card" className="w-full max-w-md p-6 text-center sm:p-8">
-        <Sticker tone="accent" tilt={2}>
+        <Logo size={40} />
+        <Sticker tone="accent" tilt={2} className="mt-5">
           one step
         </Sticker>
         <h1 className="mt-5 font-display text-2xl font-bold sm:text-3xl">{ACCEPT_TITLE}</h1>
