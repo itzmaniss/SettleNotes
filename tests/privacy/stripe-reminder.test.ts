@@ -18,6 +18,17 @@ function recorder() {
 }
 
 describe("delete-user external record reminders", () => {
+  test("the Stripe reminder covers the tax record and, with Managed Payments, the seller of record path", () => {
+    // Pins the exact wording, including the Managed Payments sentence.
+    expect(STRIPE_REMINDER).toContain(
+      "Stripe keeps its own record for tax and accounting.",
+    );
+    expect(STRIPE_REMINDER).toContain(
+      "With Managed Payments on, Stripe is also the seller of record for web payments and holds its own payment record, so a removal request for that record goes through Stripe support.",
+    );
+    expect(STRIPE_REMINDER).not.toMatch(/[\u2013\u2014]/);
+  });
+
   test("a successful erase prints the Stripe ids and both reminders", async () => {
     const fake = makeFakeDb(baseTables(), { objects: BASE_OBJECTS });
     const out = recorder();

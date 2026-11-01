@@ -5,7 +5,8 @@
 import { PLANS, formatPrice, yearlySavingsPercent, type PlanId } from "./plans";
 import type { PlanView } from "@/lib/dashboard/plan";
 import { buildPlanView } from "@/lib/dashboard/plan";
-import { isTestModeKey, stripeConfigured, type StripeEnvConfig } from "./stripe";
+import { isTestModeKey, managedPaymentsEnabled, stripeConfigured, type StripeEnvConfig } from "./stripe";
+import { MANAGED_PORTAL_LINE } from "./web-copy";
 
 // ---- Copy (plain, friendly, no dashes) --------------------------------------
 
@@ -17,13 +18,16 @@ export const STARS_ACTIVE_LINE =
 export const PAYNOW_LABEL = "Pay once with PayNow for a year";
 export const MANAGE_BUTTON_LABEL = "Manage subscription";
 export const TEST_MODE_STICKER = "Test mode, no real charges";
-export { WEB_NUDGE_LINE } from "./web-copy";
+export { WEB_NUDGE_LINE, MANAGED_PORTAL_LINE } from "./web-copy";
 
 export const SUCCESS_BANNER =
   "Thanks! Your plan switches on in a few seconds. Refresh if you do not see Pro yet.";
 export const CANCELED_BANNER = "No worries, nothing was charged.";
 export const ERROR_BANNER =
   "Something went wrong on my side. Please try again in a moment.";
+// Calm refusal when a stale PayNow request lands while Managed Payments is on.
+export const PAYNOW_UNAVAILABLE_LINE =
+  "PayNow is not available right now. You can pay monthly or yearly with a card, or use Stars in the bot.";
 
 export const MONTHLY_LABEL = "Monthly";
 export const YEARLY_LABEL = "Yearly";
@@ -68,6 +72,8 @@ export function statusBanner(status: string | undefined | null): BillingBanner |
       return { tone: "neutral", message: CANCELED_BANNER };
     case "error":
       return { tone: "error", message: ERROR_BANNER };
+    case "paynow_unavailable":
+      return { tone: "neutral", message: PAYNOW_UNAVAILABLE_LINE };
     default:
       return null;
   }
@@ -115,9 +121,13 @@ export type BillingPageView = {
   current: CurrentPlanView;
   // Billing on and Stripe configured: pay options may render.
   open: boolean;
+  // False whenever Managed Payments is on: Stripe picks the payment methods
+  // and PayNow is not among them, so the one time PayNow year disappears.
   paynowAvailable: boolean;
   // Active Stripe subscription with a real subscription ref: portal button.
   showPortal: boolean;
+  // link.com note under the portal button, only while Managed Payments is on.
+  portalNote: string | null;
   starsActive: boolean;
   testMode: boolean;
   banner: BillingBanner | null;
@@ -136,10 +146,15 @@ export function buildBillingPageView(args: {
   status: string | undefined | null;
 }): BillingPageView {
   const open = args.billingEnabled && stripeConfigured(args.env);
+  const managedPayments = managedPaymentsEnabled(args.env);
+  // Managed Payments puts Stripe in charge of payment methods, so PayNow
+  // cannot be offered and its price env var is ignored (docs/STRIPE-MANAGED-PAYMENTS.md).
   const paynowAvailable =
     open &&
+    !managedPayments &&
     typeof args.env.STRIPE_PRICE_PRO_YEARLY_PAYNOW === "string" &&
     args.env.STRIPE_PRICE_PRO_YEARLY_PAYNOW.length > 0;
+  const showPortal = args.activeStripeRef !== null && args.activeStripeRef.startsWith("sub_");
   return {
     current: buildCurrentPlan({
       plan: args.plan,
@@ -150,7 +165,10 @@ export function buildBillingPageView(args: {
     open,
     paynowAvailable,
     // A paynow:<session> ref is not a subscription, so no portal for it.
-    showPortal: args.activeStripeRef !== null && args.activeStripeRef.startsWith("sub_"),
+    showPortal,
+    // link.com also manages Managed Payments subscriptions; keep the note to
+    // one plain sentence so the portal button itself stays unchanged.
+    portalNote: showPortal && managedPayments ? MANAGED_PORTAL_LINE : null,
     starsActive: args.starsActive,
     testMode: isTestModeKey(args.env.STRIPE_SECRET_KEY),
     banner: statusBanner(args.status),

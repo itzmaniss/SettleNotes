@@ -41,6 +41,7 @@ const allEnvNames = [
   "STRIPE_PRICE_PRO_MONTHLY",
   "STRIPE_PRICE_PRO_YEARLY",
   "STRIPE_PRICE_PRO_YEARLY_PAYNOW",
+  "STRIPE_MANAGED_PAYMENTS",
 ];
 
 describe("docs/DEPLOY.md", () => {

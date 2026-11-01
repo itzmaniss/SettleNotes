@@ -18,6 +18,7 @@ import {
   type BillingPageView,
 } from "../../lib/billing/view";
 import { BillingPanel } from "../../components/billing/billing-panel";
+import type { StripeEnvConfig } from "../../lib/billing/stripe";
 import { PLANS, formatPrice } from "../../lib/billing/plans";
 
 // 28 Oct 2026, 09:00 SGT.
@@ -144,6 +145,29 @@ describe("buildBillingPageView", () => {
     ).toBe(false);
   });
 
+  test("managed payments hides paynow even with its price id set", () => {
+    const managedEnv = { ...openEnv, STRIPE_MANAGED_PAYMENTS: true };
+    expect(freeView({ env: managedEnv }).paynowAvailable).toBe(false);
+    // And the flag off keeps it, byte for byte today's behaviour.
+    expect(freeView({ env: { ...openEnv, STRIPE_MANAGED_PAYMENTS: false } }).paynowAvailable).toBe(
+      true,
+    );
+  });
+
+  test("the link.com portal note shows only with the flag on and a portal offered", () => {
+    const managedEnv = { ...openEnv, STRIPE_MANAGED_PAYMENTS: true };
+    // Free, no subscription: no portal, no note.
+    expect(freeView({ env: managedEnv }).portalNote).toBeNull();
+    // Pro on stripe with the flag: note present.
+    expect(
+      freeView({ env: managedEnv, activeStripeRef: "sub_123" }).portalNote,
+    ).toBe("You can also manage your subscription at link.com.");
+    // Portal offered but flag off: no note, exactly as today.
+    expect(freeView({ activeStripeRef: "sub_123" }).portalNote).toBeNull();
+    // Flag on but stars only: no portal, no note.
+    expect(freeView({ env: managedEnv, starsActive: true }).portalNote).toBeNull();
+  });
+
   test("portal flag requires a real subscription ref, not a paynow ref", () => {
     expect(freeView({ activeStripeRef: "sub_123" }).showPortal).toBe(true);
     expect(freeView({ activeStripeRef: "paynow:cs_1" }).showPortal).toBe(false);
@@ -200,6 +224,45 @@ describe("BillingPanel", () => {
     );
     expect(html).toContain(PAYNOW_LABEL);
     expect(html).toContain('value="paynow"');
+  });
+
+  test("managed payments: paynow button gone, card options untouched", () => {
+    const html = render(
+      freeView({ env: { ...openEnv, STRIPE_MANAGED_PAYMENTS: true } }),
+    );
+    expect(html).not.toContain(PAYNOW_LABEL);
+    expect(html).not.toContain('value="paynow"');
+    expect(html).toContain('value="monthly"');
+    expect(html).toContain('value="yearly"');
+  });
+
+  test("managed payments portal note renders under the manage button, flag off hides it", () => {
+    const managedView = (env: StripeEnvConfig) =>
+      buildBillingPageView({
+        plan: "pro",
+        periodEnd: "2026-11-30T16:00:00.000Z",
+        usage: {},
+        now: NOW,
+        billingEnabled: true,
+        env,
+        activeStripeRef: "sub_123",
+        starsActive: false,
+        status: undefined,
+      });
+    const on = render(managedView({ ...openEnv, STRIPE_MANAGED_PAYMENTS: true }));
+    expect(on).toContain(MANAGE_BUTTON_LABEL);
+    expect(on).toContain("You can also manage your subscription at link.com.");
+    // Flag off: unchanged page, no note anywhere.
+    const off = render(managedView(openEnv));
+    expect(off).toContain(MANAGE_BUTTON_LABEL);
+    expect(off).not.toContain("link.com");
+  });
+
+  test("the paynow_unavailable status shows the calm banner, not the error one", () => {
+    const html = render(freeView({ status: "paynow_unavailable" }));
+    expect(html).toContain("PayNow is not available right now.");
+    expect(html).not.toContain(ERROR_BANNER);
+    expect(html).not.toMatch(/[\u2014\u2013]/);
   });
 
   test("pro on stripe: manage button and no purchase forms", () => {

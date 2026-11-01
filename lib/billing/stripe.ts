@@ -16,6 +16,7 @@ export type StripeEnvConfig = {
   STRIPE_PRICE_PRO_MONTHLY?: string | undefined;
   STRIPE_PRICE_PRO_YEARLY?: string | undefined;
   STRIPE_PRICE_PRO_YEARLY_PAYNOW?: string | undefined;
+  STRIPE_MANAGED_PAYMENTS?: boolean | undefined;
 };
 
 export type BillingInterval = "monthly" | "yearly";
@@ -41,6 +42,14 @@ export function priceIdFor(interval: BillingInterval, env: StripeEnvConfig): str
   return typeof priceId === "string" && priceId.length > 0 ? priceId : null;
 }
 
+// Stripe Managed Payments switch: Stripe sells the subscription as merchant of
+// record and handles tax. Pure read of the parsed flag so every branch that
+// depends on it takes the value as an argument (tests never touch process env).
+// Off by default; see docs/STRIPE-MANAGED-PAYMENTS.md before enabling.
+export function managedPaymentsEnabled(env: StripeEnvConfig): boolean {
+  return env.STRIPE_MANAGED_PAYMENTS === true;
+}
+
 // The secret key prefix is the one honest signal we have for test mode; keys
 // only ever come from env.
 export function isTestModeKey(secretKey: string | null | undefined): boolean {
@@ -49,28 +58,74 @@ export function isTestModeKey(secretKey: string | null | undefined): boolean {
 
 // ---- Checkout params ---------------------------------------------------------
 
+// The user id travels in three places on purpose: client_reference_id ties the
+// session to the account, session metadata is read back on checkout events,
+// and subscription metadata rides every later subscription webhook, which is
+// the only one of the three that survives past the first invoice.
 export type CheckoutParamsArgs = {
   userId: string;
   interval: BillingInterval;
   baseUrl: string;
   priceId: string;
+  managedPayments?: boolean;
 };
 
-// The user id travels in three places on purpose: client_reference_id ties the
-// session to the account, session metadata is read back on checkout events,
-// and subscription metadata rides every later subscription webhook, which is
-// the only one of the three that survives past the first invoice.
+// UNVERIFIED under Managed Payments: Stripe's docs excerpt did not cover
+// promotion codes, so the owner must confirm in test mode that
+// allow_promotion_codes is accepted on a managed session. Removing this one
+// constant drops codes from checkout without touching anything else
+// (docs/STRIPE-MANAGED-PAYMENTS.md, unverified list).
+const ALLOW_PROMOTION_CODES = true;
+
+// Keys Stripe rejects on a Managed Payments checkout session. The builder
+// never adds them; this guard keeps a future edit from silently doing so.
+// payment_method_types is not on this SDK's types but is treated the same as
+// the allowed_payment_method_types filter this SDK exposes.
+const MANAGED_PAYMENTS_UNSUPPORTED_KEYS = [
+  "adaptive_pricing",
+  "automatic_tax",
+  "tax_id_collection",
+  "subscription_data.default_tax_rates",
+  "payment_method_configuration",
+  "payment_method_types",
+  "allowed_payment_method_types",
+] as const;
+
+// Pure guard used inside the managed checkout builder: throws naming the first
+// offending key so a bad params object can never reach Stripe.
+export function assertManagedPaymentsParams(params: Stripe.Checkout.SessionCreateParams): void {
+  const raw = params as unknown as Record<string, unknown>;
+  for (const key of MANAGED_PAYMENTS_UNSUPPORTED_KEYS) {
+    const [top, nested] = key.split(".");
+    const value =
+      nested === undefined ? raw[top] : (raw[top] as Record<string, unknown> | undefined)?.[nested];
+    if (value !== undefined) {
+      throw new Error(
+        `Managed Payments checkout cannot include ${key}; Stripe controls it under Managed Payments`,
+      );
+    }
+  }
+}
+
 export function buildCheckoutParams(args: CheckoutParamsArgs): Stripe.Checkout.SessionCreateParams {
-  return {
+  const params: Stripe.Checkout.SessionCreateParams = {
     mode: "subscription",
     client_reference_id: args.userId,
     metadata: { user_id: args.userId },
     subscription_data: { metadata: { user_id: args.userId } },
     success_url: `${args.baseUrl}/billing?status=success`,
     cancel_url: `${args.baseUrl}/billing?status=canceled`,
-    allow_promotion_codes: true,
+    allow_promotion_codes: ALLOW_PROMOTION_CODES,
     line_items: [{ price: args.priceId, quantity: 1 }],
   };
+  if (args.managedPayments === true) {
+    // Stripe Managed Payments: Stripe becomes seller of record and handles
+    // tax. Present in the SDK types even though the card notes predate them.
+    // Subscription mode only; no unsupported key may ride along.
+    params.managed_payments = { enabled: true };
+    assertManagedPaymentsParams(params);
+  }
+  return params;
 }
 
 export type PayNowParamsArgs = {
@@ -471,6 +526,9 @@ export type CheckoutActionDeps = {
 };
 
 const BILLING_ERROR_URL = "/billing?status=error";
+// Friendly refusal for PayNow while Managed Payments is on: /billing shows a
+// calm banner instead of the error one (view.ts PAYNOW_UNAVAILABLE_LINE).
+const PAYNOW_UNAVAILABLE_URL = "/billing?status=paynow_unavailable";
 
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -490,11 +548,15 @@ export async function startCheckoutFor(
   if (!deps.billingEnabled()) return BILLING_ERROR_URL;
   const env = deps.env();
   if (!stripeConfigured(env)) return BILLING_ERROR_URL;
+  const managedPayments = managedPaymentsEnabled(env);
   const userId = await deps.sessionUserId();
   if (!UUID.safeParse(userId).success) return BILLING_ERROR_URL;
   const baseUrl = deps.baseUrl();
   try {
     if (parsed.data === "paynow") {
+      // Managed Payments lets Stripe pick the payment methods, and PayNow is
+      // not among them. Refuse before any session exists; /billing explains.
+      if (managedPayments) return PAYNOW_UNAVAILABLE_URL;
       const priceId = env.STRIPE_PRICE_PRO_YEARLY_PAYNOW;
       if (typeof priceId !== "string" || priceId.length === 0) return BILLING_ERROR_URL;
       const session = await deps.createSession(buildPayNowParams({ userId, baseUrl, priceId }));
@@ -503,7 +565,7 @@ export async function startCheckoutFor(
     const priceId = priceIdFor(parsed.data, env);
     if (priceId === null) return BILLING_ERROR_URL;
     const session = await deps.createSession(
-      buildCheckoutParams({ userId, interval: parsed.data, baseUrl, priceId }),
+      buildCheckoutParams({ userId, interval: parsed.data, baseUrl, priceId, managedPayments }),
     );
     return session.url ?? BILLING_ERROR_URL;
   } catch (error) {

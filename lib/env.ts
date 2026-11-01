@@ -85,6 +85,13 @@ const envSchema = z.object({
   STRIPE_PRICE_PRO_MONTHLY: z.string().optional(),
   STRIPE_PRICE_PRO_YEARLY: z.string().optional(),
   STRIPE_PRICE_PRO_YEARLY_PAYNOW: z.string().optional(),
+  // Stripe Managed Payments: Stripe becomes the seller of record for web card
+  // payments and handles tax. Off by default; only turn it on after the
+  // checklist in docs/STRIPE-MANAGED-PAYMENTS.md has been done in Stripe.
+  STRIPE_MANAGED_PAYMENTS: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
 });
 
 export type Env = z.infer<typeof envSchema>;

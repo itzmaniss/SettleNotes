@@ -26,9 +26,10 @@ export const DELETE_USAGE =
   "Usage: bun run scripts/delete-user.ts --telegram-id <id> [--yes] [--force]";
 
 // Exact reminder shown after a successful erase: the erase never contacts
-// Stripe, and Stripe keeps its own records for tax and accounting.
+// Stripe, and Stripe keeps its own records for tax and accounting. With
+// Managed Payments Stripe is also the seller of record for web payments.
 export const STRIPE_REMINDER =
-  "Stripe keeps its own record for tax and accounting. If the student asked for it to be removed, handle it in the Stripe dashboard (only if your accounting rules allow) and note the date in your request log.";
+  "Stripe keeps its own record for tax and accounting. If the student asked for it to be removed, handle it in the Stripe dashboard (only if your accounting rules allow) and note the date in your request log. With Managed Payments on, Stripe is also the seller of record for web payments and holds its own payment record, so a removal request for that record goes through Stripe support.";
 export const STARS_REMINDER = "Telegram keeps its own payment record.";
 
 export type ParsedDeleteArgs =

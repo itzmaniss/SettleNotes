@@ -39,6 +39,7 @@ All configuration is runtime env, read from one file. Nothing secret goes into t
 | STRIPE_PRICE_PRO_MONTHLY | no | Recurring monthly price id for Pro. |
 | STRIPE_PRICE_PRO_YEARLY | no | Recurring yearly price id for Pro. |
 | STRIPE_PRICE_PRO_YEARLY_PAYNOW | no | One-time yearly price id; enables the PayNow button on `/billing`. |
+| STRIPE_MANAGED_PAYMENTS | no | `false` by default. With `true`, Stripe Managed Payments sells the web subscriptions (seller of record, tax handled by Stripe) and the PayNow option is hidden. Read `docs/STRIPE-MANAGED-PAYMENTS.md` and finish its checklist before setting `true`. |
 
 Generate the two secrets:
 

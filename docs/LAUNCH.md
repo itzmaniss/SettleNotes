@@ -35,6 +35,7 @@ Settle only creates an account after a person accepts the Terms and the Privacy 
 - [ ] **[Manager]** After the legal pages ship, re-run the smoke script: the three `legal page` lines must read PASS, not WARN.
 - [ ] **[User]** Keep `STRIPE_PRICE_PRO_YEARLY_PAYNOW` unset until the Terms and the refund text cover a one time yearly PayNow payment. Leaving it blank hides the PayNow button; filling it earlier would sell a plan the legal text does not describe yet.
 - [ ] **[User]** In the Stripe dashboard, configure the customer portal with cancellation enabled (test mode first, then live) before testing the Manage subscription button.
+- [ ] **[User]** Optional, decide before launch: Stripe Managed Payments (Stripe becomes the seller of record for web card payments and handles tax) ships behind the `STRIPE_MANAGED_PAYMENTS` env switch, `false` by default, so leaving it unset changes nothing. Read `docs/STRIPE-MANAGED-PAYMENTS.md` first: it explains the fee, lists an owner checklist (Stripe dashboard setup, eligibility review, tax code, tax behavior, checkout links, portal) and what to confirm in test mode. With it on, the PayNow year option is hidden and Stripe also manages refunds and payment support through Link.
 
 
 ## 2. Infrastructure
@@ -229,6 +230,7 @@ The money steps, per payment method. Tell the student by email in every case, an
 ### Stripe card, monthly or yearly
 
 - [ ] **[Manager]** Refund in the Stripe dashboard (Payments, the payment, Refund) AND cancel the subscription in the same sitting (Subscriptions, then Cancel). A refund alone does not stop the next renewal.
+- [ ] **[Manager]** With Managed Payments on (`STRIPE_MANAGED_PAYMENTS=true`), Stripe may also issue refunds on its own within 60 days, and it can refund without approval when a support request goes unanswered for 48 hours; student payment support requests then go through Link instead of you. Same webhook events arrive either way, so the subscriptions table stays correct without extra work. See `docs/STRIPE-MANAGED-PAYMENTS.md`.
 
 ### Telegram Stars
 

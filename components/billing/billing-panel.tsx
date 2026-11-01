@@ -84,6 +84,9 @@ export function BillingPanel({ view, startCheckout, openPortal }: BillingPanelPr
               {MANAGE_BUTTON_LABEL}
             </ChunkButton>
           </form>
+          {view.portalNote !== null && (
+            <p className="mt-2 text-sm text-muted-foreground">{view.portalNote}</p>
+          )}
         </section>
       ) : view.starsActive ? (
         <p className="mt-8 text-sm text-muted-foreground">{STARS_ACTIVE_LINE}</p>
