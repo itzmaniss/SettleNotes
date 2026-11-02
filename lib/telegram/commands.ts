@@ -161,3 +161,49 @@ export function createDoneCommand(deps: Partial<DoneCommandDeps> = {}) {
     }
   };
 }
+
+// ---- The "/" command menu Telegram shows above the keyboard -----------------
+// Without setMyCommands the menu never appears, so students cannot discover
+// the commands. Descriptions match what the commands actually do.
+
+export type BotCommandMenuEntry = { command: string; description: string };
+
+export function BOT_COMMAND_MENU(options: { billingEnabled: boolean }): BotCommandMenuEntry[] {
+  const entries: BotCommandMenuEntry[] = [
+    { command: "start", description: "Say hello and get set up" },
+    { command: "tasks", description: "See what is due next" },
+    { command: "done", description: "Tick off a task, for example /done 1" },
+    { command: "dashboard", description: "Open your dashboard on the web" },
+    { command: "help", description: "What I can do" },
+  ];
+  if (options.billingEnabled) {
+    entries.push({ command: "pro", description: "See the Pro plan" });
+  }
+  return entries;
+}
+
+// Minimal structural view of the grammY Api surface the sync needs, so tests
+// can pass a recording fake instead of a real bot api.
+export type BotCommandsApi = {
+  setMyCommands: (commands: BotCommandMenuEntry[]) => Promise<unknown>;
+  setChatMenuButton: (other: { menu_button: { type: "commands" } }) => Promise<unknown>;
+};
+
+// Registers the menu and switches the chat menu button to show it. Startup
+// sugar: a Telegram hiccup here must never stop the bot coming up, so any
+// failure logs one line and returns.
+export async function syncBotCommands(
+  api: BotCommandsApi,
+  options: { billingEnabled: boolean },
+): Promise<void> {
+  const commands = BOT_COMMAND_MENU(options);
+  try {
+    await api.setMyCommands(commands);
+    await api.setChatMenuButton({ menu_button: { type: "commands" } });
+  } catch (error) {
+    console.error(
+      "[telegram] failed to sync the bot command menu:",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}

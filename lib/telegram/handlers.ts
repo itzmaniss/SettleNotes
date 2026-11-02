@@ -20,6 +20,7 @@ import {
 } from "@/lib/meta/transcribe";
 import { inspectPdf, isSupportedMime, InvalidPdfError, normalizeImage, UnsupportedMimeError } from "@/lib/media/normalize";
 import { uploadOriginal } from "@/lib/media/storage";
+import { conversationMemory, type ConversationMemory } from "@/lib/pipeline/conversation";
 import { createIngestDeps, ingestContent } from "@/lib/pipeline/ingest";
 import type { IngestInput, IngestOutcome, PendingPrompt } from "@/lib/pipeline/ingest";
 import { isAccessAllowed, type AccessPolicy } from "@/lib/telegram/access";
@@ -56,14 +57,30 @@ export type BotContextLike = {
   from?: User;
   chat?: Chat;
   message?: Message;
-  reply: (text: string, other?: { reply_markup?: unknown }) => Promise<unknown>;
+  reply: (
+    text: string,
+    other?: { reply_markup?: unknown; reply_parameters?: unknown },
+  ) => Promise<unknown>;
   replyWithPhoto: (
     photo: InputFile,
-    other?: { caption?: string; reply_markup?: unknown },
+    other?: { caption?: string; reply_markup?: unknown; reply_parameters?: unknown },
   ) => Promise<unknown>;
   replyWithChatAction: (action: string) => Promise<unknown>;
   api: { getFile: (fileId: string) => Promise<{ file_path?: string; file_size?: number }> };
 };
+
+// The parameters that make a send visually answer an incoming message.
+// allow_sending_without_reply keeps the reply working when the student has
+// already deleted the original message. No message (or one without an id)
+// returns undefined, meaning: send a plain reply.
+export function replyParamsFor(
+  message?: Pick<Message, "message_id">,
+): { reply_parameters: { message_id: number; allow_sending_without_reply: true } } | undefined {
+  const id = message?.message_id;
+  return typeof id === "number" && Number.isInteger(id)
+    ? { reply_parameters: { message_id: id, allow_sending_without_reply: true } }
+    : undefined;
+}
 
 export type HandlerDeps = {
   upsertUser: (i: UpsertUserInput) => Promise<UserRow>;
@@ -87,6 +104,9 @@ export type HandlerDeps = {
   // command handlers can omit it; the real one is built lazily in
   // createHandlerDeps and fails open when its lookup throws.
   checkRateLimit?: RateLimitCheck;
+  // Short term conversation memory. Optional so tests can inject a fresh one;
+  // defaults to the module level instance (in memory only, never persisted).
+  conversation?: ConversationMemory;
 };
 
 export function createHandlerDeps(): HandlerDeps {
@@ -360,6 +380,7 @@ async function passRateLimit(ctx: BotContextLike, deps: HandlerDeps, userId: str
 async function processMessage(ctx: BotContextLike, deps: HandlerDeps, spec: MessageSpec): Promise<void> {
   if (ctx.from === undefined) return;
 
+  const memory = deps.conversation ?? conversationMemory;
   let upload: UploadRow | undefined;
   // The interval is injectable so tests never wait for a real tick.
   let typingTimer: ReturnType<typeof setInterval> | undefined;
@@ -438,10 +459,32 @@ async function processMessage(ctx: BotContextLike, deps: HandlerDeps, spec: Mess
         };
       }
     } else {
-      ingestInput = { user, upload, text: spec.text };
+      // Text messages continue an ongoing conversation: hand the model the
+      // last few turns so a follow up like "tuesday also" is read together
+      // with the question it answers. Photos, documents and voice transcripts
+      // are understood on their own and never touch the memory.
+      ingestInput = {
+        user,
+        upload,
+        text: spec.text,
+        recentExchange: memory.recent(user.id),
+      };
     }
 
     const outcome = await deps.ingest(ingestInput);
+
+    if (spec.kind === "text") {
+      // Understanding is done, so this exchange joins the short term memory:
+      // what the student said, then the question Settle asked back, if any.
+      const said = (spec.text ?? "").trim();
+      if (said.length > 0) memory.remember(user.id, { role: "student", text: said });
+      if (
+        (outcome.kind === "tasks" || outcome.kind === "nothing") &&
+        outcome.clarification != null
+      ) {
+        memory.remember(user.id, { role: "settle", text: outcome.clarification });
+      }
+    }
 
     if (outcome.kind === "math") {
       await sendMathOutcome(ctx, outcome, deps.botToken);
@@ -499,7 +542,11 @@ async function sendMathOutcome(
 ): Promise<void> {
   if (outcome.annotated != null) {
     try {
-      await ctx.replyWithPhoto(new InputFile(outcome.annotated), { caption: outcome.caption });
+      // The annotated photo is the direct answer to the math photo sent in.
+      await ctx.replyWithPhoto(new InputFile(outcome.annotated), {
+        caption: outcome.caption,
+        ...replyParamsFor(ctx.message),
+      });
     } catch (error) {
       console.error("[telegram] photo reply failed:", messageOf(error, botToken));
       await replySafely(ctx, outcome.caption);
@@ -516,8 +563,13 @@ async function replySafely(
   text: string,
   other?: { reply_markup?: unknown },
 ): Promise<void> {
+  // One funnel for every answer to an incoming message, so each send is
+  // linked to the message it replies to. Other stays undefined (not an empty
+  // object) when there is nothing to attach, which some replies assert on.
+  const options = { ...replyParamsFor(ctx.message), ...other };
+  const hasOptions = Object.keys(options).length > 0;
   try {
-    await ctx.reply(text, other);
+    await ctx.reply(text, hasOptions ? options : undefined);
   } catch (error) {
     // A failed reply must never bubble into after() or polling.
     console.error("[telegram] reply failed:", error instanceof Error ? error.message : String(error));

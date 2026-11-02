@@ -3,6 +3,7 @@ import {
   buildUnderstandUserText,
   UNDERSTAND_SYSTEM_PROMPT,
 } from '@/lib/meta/prompts/understand';
+import type { ConversationTurn } from '@/lib/pipeline/conversation';
 import { utcToSgtLocal } from '@/lib/pipeline/dates';
 import { z } from 'zod';
 
@@ -46,6 +47,9 @@ export type UnderstandArgs = {
   text?: string | null;
   image?: { base64: string; mimeType?: string };
   pdf?: { base64: string; filename: string };
+  // Earlier turns of this conversation, oldest first, so a short follow up is
+  // read together with the question it answers. Only ever plain text messages.
+  recentExchange?: ConversationTurn[];
 };
 
 export type UnderstandResult = {
@@ -120,6 +124,7 @@ export async function understand(
     text: args.text ?? null,
     hasImage: args.image != null,
     hasPdf: args.pdf != null,
+    recentExchange: args.recentExchange,
   });
 
   const input: InputPart[] = [{ type: 'text', text: userText }];

@@ -13,6 +13,7 @@ import type { PendingActionInput, PendingActionRow } from "@/lib/clarify/types";
 import { getMetaClient } from "@/lib/meta/index";
 import type { MetaClient } from "@/lib/meta/client";
 import { BudgetExceededError } from "@/lib/meta/client";
+import type { ConversationTurn } from "@/lib/pipeline/conversation";
 import { dueLocalToUtc } from "@/lib/pipeline/dates";
 import { executeOps, type ExecuteResult } from "@/lib/pipeline/execute";
 import {
@@ -69,6 +70,9 @@ export type IngestInput = {
   // Storage path of the original file, uploaded by the handler after the
   // upload row existed. Written into the row here so the DB stays truthful.
   storagePath?: string | null;
+  // Earlier turns of this conversation, oldest first. Set by the handler for
+  // plain text messages only; photos, documents and voice never carry it.
+  recentExchange?: ConversationTurn[];
 };
 
 export type PendingPrompt = { pendingId: string; text: string };
@@ -158,6 +162,7 @@ export async function ingestContent(deps: IngestDeps, input: IngestInput): Promi
       pdf: input.pdf
         ? { base64: input.pdf.base64, filename: input.pdf.filename }
         : undefined,
+      recentExchange: input.recentExchange,
     },
   );
 

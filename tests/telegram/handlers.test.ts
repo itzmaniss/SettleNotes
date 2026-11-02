@@ -7,6 +7,7 @@ import type { TaskRow, UploadRow, UserRow } from "../../lib/db/types";
 import { AudioConversionError } from "../../lib/media/audio";
 import { BudgetExceededError } from "../../lib/meta/client";
 import type { TranscribeArgs, TranscribeResult } from "../../lib/meta/transcribe";
+import { createConversationMemory, type ConversationMemory } from "../../lib/pipeline/conversation";
 import { FileTooLargeError } from "../../lib/telegram/files";
 import {
   allowlistMiddleware,
@@ -15,6 +16,7 @@ import {
   handlePhotoMessage,
   handleTextMessage,
   handleVoiceMessage,
+  replyParamsFor,
   type BotContextLike,
   type HandlerDeps,
 } from "../../lib/telegram/handlers";
@@ -26,6 +28,7 @@ import {
   heardPrefix,
   mathPendingReply,
   pdfTruncatedNote,
+  rateLimitReply,
   REFUSAL_TEXT,
   unknownCommandReply,
   unsupportedFileReply,
@@ -84,13 +87,13 @@ function makePdf(pageCount: number): Buffer {
 
 type CtxSpy = {
   ctx: BotContextLike;
-  replies: Array<{ text: string; other?: { reply_markup?: unknown } }>;
-  photos: Array<{ caption?: string; bytes: number; markup: unknown }>;
+  replies: Array<{ text: string; other?: { reply_markup?: unknown; reply_parameters?: unknown } }>;
+  photos: Array<{ caption?: string; bytes: number; markup: unknown; replyParams: unknown }>;
   typingCount: () => number;
 };
 
 function makeCtx(message: Record<string, unknown>): CtxSpy {
-  const replies: Array<{ text: string; other?: { reply_markup?: unknown } }> = [];
+  const replies: Array<{ text: string; other?: { reply_markup?: unknown; reply_parameters?: unknown } }> = [];
   const photos: CtxSpy["photos"] = [];
   let typing = 0;
   const ctx: BotContextLike = {
@@ -108,6 +111,7 @@ function makeCtx(message: Record<string, unknown>): CtxSpy {
         caption: other?.caption,
         bytes: fileData instanceof Uint8Array ? fileData.byteLength : 0,
         markup: other?.reply_markup,
+        replyParams: other?.reply_parameters,
       });
       return {};
     },
@@ -139,6 +143,7 @@ function makeDeps(overrides: {
   convertAudio?: NonNullable<HandlerDeps["convertAudio"]>;
   transcribe?: NonNullable<HandlerDeps["transcribe"]>;
   listOpenTasks?: NonNullable<HandlerDeps["listOpenTasks"]>;
+  conversation?: ConversationMemory;
 } = {}): DepsSpy {
   const uploads: CreateUploadInput[] = [];
   const finished: Array<{ id: string; patch: FinishUploadPatch }> = [];
@@ -237,6 +242,7 @@ function makeDeps(overrides: {
     appBaseUrl: "https://settle.example.com",
     now: () => NOW,
     typingIntervalMs: 5,
+    ...(overrides.conversation ? { conversation: overrides.conversation } : {}),
   };
   return { deps, uploads, finished, downloads, originals, ingests, upserts };
 }
@@ -1022,5 +1028,188 @@ describe("allowlistMiddleware", () => {
     expect(REFUSAL_TEXT).toBe(
       "Hi! Settle is in private testing right now, so I can't help you yet. Come back soon.",
     );
+  });
+});
+
+describe("replyParamsFor", () => {
+  test("builds exactly the reply parameters for a message id", () => {
+    expect(replyParamsFor({ message_id: 42 } as Message)).toEqual({
+      reply_parameters: { message_id: 42, allow_sending_without_reply: true },
+    });
+  });
+
+  test("a missing message or message id falls back to a plain reply", () => {
+    expect(replyParamsFor(undefined)).toBeUndefined();
+    expect(replyParamsFor({} as Message)).toBeUndefined();
+  });
+});
+
+describe("replies are visibly linked to the student's message", () => {
+  function ctxWithId(message: Record<string, unknown>, id: number): CtxSpy {
+    return makeCtx({ ...message, message_id: id, date: 1, chat: { id: 101, type: "private" }, from: { id: 101, is_bot: false, first_name: "Tim" } });
+  }
+
+  const REPLY_PARAMS = (id: number) => ({ reply_parameters: { message_id: id, allow_sending_without_reply: true } });
+
+  test("the task summary reply answers the message it came from", async () => {
+    const spy = ctxWithId({ text: "prof say extend lab 4 to nxt fri liao" }, 55);
+    const { deps } = makeDeps();
+
+    await handleTextMessage(spy.ctx, deps);
+
+    expect(spy.replies[0].other).toEqual({
+      ...REPLY_PARAMS(55),
+      reply_markup: spy.replies[0].other?.reply_markup,
+    });
+    expect(spy.replies[0].other?.reply_markup).toBeDefined();
+  });
+
+  test("the clarification question reply answers the message it came from", async () => {
+    const spy = ctxWithId({ text: "not sure which one" }, 56);
+    const { deps } = makeDeps({
+      ingestOutcome: { kind: "nothing", clarification: "Which task do you mean?" },
+    });
+
+    await handleTextMessage(spy.ctx, deps);
+
+    expect(spy.replies).toHaveLength(1);
+    expect(spy.replies[0].text).toBe("Which task do you mean?");
+    expect(spy.replies[0].other).toEqual({
+      ...REPLY_PARAMS(56),
+      reply_markup: spy.replies[0].other?.reply_markup,
+    });
+    expect(spy.replies[0].other?.reply_markup).toBeDefined();
+  });
+
+  test("the error reply answers the message it came from", async () => {
+    const spy = ctxWithId({ text: "hello" }, 57);
+    const { deps } = makeDeps({ ingestError: new Error("boom") });
+
+    await handleTextMessage(spy.ctx, deps);
+
+    expect(spy.replies.map((r) => r.text)).toEqual([failureReply()]);
+    expect(spy.replies[0].other).toEqual(REPLY_PARAMS(57));
+  });
+
+  test("the quota reply answers the message it came from", async () => {
+    const jpeg = await tinyJpeg();
+    const spy = ctxWithId(
+      { photo: [{ file_id: "photo-1", width: 100, height: 100 }], caption: null },
+      58,
+    );
+    const { deps } = makeDeps({
+      fileBuffer: jpeg,
+      ingestOutcome: { kind: "quota", text: "quota text" },
+    });
+
+    await handlePhotoMessage(spy.ctx, deps);
+
+    expect(spy.replies[0].text).toBe("quota text");
+    expect(spy.replies[0].other).toEqual(REPLY_PARAMS(58));
+  });
+
+  test("the rate limit reply answers the message it came from", async () => {
+    const spy = ctxWithId({ text: "hello" }, 59);
+    const { deps } = makeDeps();
+    deps.checkRateLimit = async () => ({ allowed: false, retryAfterSeconds: 30, window: "minute" });
+
+    await handleTextMessage(spy.ctx, deps);
+
+    expect(spy.replies.map((r) => r.text)).toEqual([rateLimitReply(30)]);
+    expect(spy.replies[0].other).toEqual(REPLY_PARAMS(59));
+    expect(spy.replies[0].other?.reply_markup).toBeUndefined();
+  });
+
+  test("the annotated math photo answers the message it came from", async () => {
+    const jpeg = await tinyJpeg();
+    const spy = ctxWithId(
+      { photo: [{ file_id: "photo-1", width: 100, height: 100 }], caption: null },
+      60,
+    );
+    const { deps } = makeDeps({
+      fileBuffer: jpeg,
+      ingestOutcome: {
+        kind: "math",
+        caption: "Step 2 slipped",
+        annotated: Buffer.from("annotated-jpeg-bytes"),
+        practiceText: null,
+        extra: null,
+      },
+    });
+
+    await handlePhotoMessage(spy.ctx, deps);
+
+    // replyParams holds the reply_parameters object itself.
+    expect(spy.photos[0].replyParams).toEqual(REPLY_PARAMS(60).reply_parameters);
+  });
+
+  test("without a message id the reply stays plain, as before", async () => {
+    const spy = makeCtx({ text: "hello", date: 1, chat: { id: 101, type: "private" }, from: { id: 101, is_bot: false, first_name: "Tim" } });
+    const { deps } = makeDeps({
+      ingestOutcome: { kind: "nothing", clarification: "Which task do you mean?" },
+    });
+
+    await handleTextMessage(spy.ctx, deps);
+
+    // No reply_parameters at all: the fallback keeps the plain reply.
+    expect(spy.replies[0].other?.reply_parameters).toBeUndefined();
+  });
+});
+
+describe("short term conversation memory", () => {
+  function ctxWithMessage(message: Record<string, unknown>, id: number): CtxSpy {
+    return makeCtx({ ...message, message_id: id, date: 1, chat: { id: 101, type: "private" }, from: { id: 101, is_bot: false, first_name: "Tim" } });
+  }
+
+  const QUESTION = "What is the new due date for the MA2001 tutorial next week?";
+
+  test("a follow up text is understood with the question it answers, keyed by internal user id", async () => {
+    const memory = createConversationMemory({ now: () => 0 });
+    const first = ctxWithMessage({ text: "nvm prof for 2001 say change tutorial to next week liao" }, 11);
+    const d1 = makeDeps({ conversation: memory, ingestOutcome: { kind: "nothing", clarification: QUESTION } });
+    await handleTextMessage(first.ctx, d1.deps);
+
+    // Nothing was held yet, so the first message went in on its own.
+    expect((d1.ingests[0] as { recentExchange?: unknown }).recentExchange).toEqual([]);
+
+    const second = ctxWithMessage({ text: "tuesday also" }, 12);
+    const d2 = makeDeps({ conversation: memory, ingestOutcome: { kind: "nothing", clarification: null } });
+    await handleTextMessage(second.ctx, d2.deps);
+
+    expect((d2.ingests[0] as { recentExchange?: unknown }).recentExchange).toEqual([
+      { role: "student", text: "nvm prof for 2001 say change tutorial to next week liao" },
+      { role: "settle", text: QUESTION },
+    ]);
+    // userKey is the internal user id, never the Telegram id.
+    expect(memory.recent("user-1")).toEqual([
+      { role: "student", text: "nvm prof for 2001 say change tutorial to next week liao" },
+      { role: "settle", text: QUESTION },
+      { role: "student", text: "tuesday also" },
+    ]);
+    expect(memory.recent("101")).toEqual([]);
+  });
+
+  test("photos and documents never read or write the memory", async () => {
+    const memory = createConversationMemory({ now: () => 0 });
+    const jpeg = await tinyJpeg();
+    const photo = ctxWithMessage({
+      photo: [{ file_id: "photo-1", width: 100, height: 100 }],
+      caption: "extend lab 4 please",
+    }, 13);
+    const dPhoto = makeDeps({ fileBuffer: jpeg, conversation: memory });
+    await handlePhotoMessage(photo.ctx, dPhoto.deps);
+
+    expect("recentExchange" in (dPhoto.ingests[0] as Record<string, unknown>)).toBe(false);
+
+    const pdf = makePdf(2);
+    const doc = ctxWithMessage({
+      document: { file_id: "doc-1", mime_type: "application/pdf", file_name: "brief.pdf" },
+      caption: null,
+    }, 14);
+    const dDoc = makeDeps({ fileBuffer: pdf, conversation: memory });
+    await handleDocumentMessage(doc.ctx, dDoc.deps);
+
+    expect("recentExchange" in (dDoc.ingests[0] as Record<string, unknown>)).toBe(false);
+    expect(memory.recent("user-1")).toEqual([]);
   });
 });

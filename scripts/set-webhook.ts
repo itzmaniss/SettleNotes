@@ -2,6 +2,7 @@
 // Usage: bun run scripts/set-webhook.ts
 import { env } from "../lib/env";
 import { ensureBotReady } from "../lib/telegram/bot";
+import { syncBotCommands } from "../lib/telegram/commands";
 import { TELEGRAM_ALLOWED_UPDATES } from "../lib/telegram/callbacks";
 import { resolveWebhookUrl } from "../lib/telegram/guards";
 
@@ -18,6 +19,9 @@ await bot.api.setWebhook(url, {
   secret_token: env.TELEGRAM_WEBHOOK_SECRET,
   allowed_updates: [...TELEGRAM_ALLOWED_UPDATES],
 });
+
+// Register the "/" command menu so Telegram shows it above the keyboard.
+await syncBotCommands(bot.api, { billingEnabled: env.BILLING_ENABLED });
 
 // Never print the token or the secret, the URL is the only thing worth showing.
 console.log(`Webhook set to ${url}`);
