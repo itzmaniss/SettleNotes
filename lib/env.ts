@@ -63,6 +63,12 @@ const envSchema = z.object({
   MODEL_API_KEY: requiredString,
   META_API_BASE_URL: z.url().default("https://api.meta.ai/v1"),
   META_MODEL: requiredString.default("muse-spark-1.3"),
+  // Optional faster model for text only messages (no image or pdf). Blank or
+  // missing means "use META_MODEL".
+  META_TEXT_MODEL: z.string().optional(),
+  // Optional reasoning effort for those text only calls. Blank or missing
+  // means "low", the effort used today.
+  META_TEXT_EFFORT: z.enum(["minimal", "low", "medium"]).optional(),
   META_TRANSCRIBE_MODEL: requiredString.default("muse-voice-transcribe-1.0"),
   META_DAILY_BUDGET_USD: positiveNumber.default(10),
   SUPABASE_URL: z.url(),

@@ -1,0 +1,19 @@
+{
+  "id": "new-task-explicit-time",
+  "description": "A plain new task with an explicit time: the stated 5pm is kept, proving the 23:59 default only applies when no time is given",
+  "now": "2026-11-02T11:23:00+08:00",
+  "openTasks": [],
+  "text": "got MA2001 quiz this friday 5pm",
+  "expected": {
+    "actions": [
+      {
+        "type": "create",
+        "title": "MA2001 quiz",
+        "course": "MA2001",
+        "kind": "test",
+        "due_local": "2026-11-06T17:00"
+      }
+    ],
+    "needs_clarification": false
+  }
+}

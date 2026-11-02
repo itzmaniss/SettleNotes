@@ -25,6 +25,8 @@ All configuration is runtime env, read from one file. Nothing secret goes into t
 | MODEL_API_KEY | yes | Meta Model API key from dev.meta.ai. |
 | META_API_BASE_URL | no | Meta API base URL, defaults to `https://api.meta.ai/v1`. |
 | META_MODEL | no | Defaults to `muse-spark-1.3`. |
+| META_TEXT_MODEL | no | Optional faster model for text only messages (no image or PDF attached). Blank or missing means `META_MODEL` is used. Manager, speed setting. |
+| META_TEXT_EFFORT | no | Reasoning effort for those text only calls: `minimal`, `low` or `medium`. Blank or missing means `low`. Manager, speed setting. |
 | META_TRANSCRIBE_MODEL | no | Defaults to `muse-voice-transcribe-1.0`. |
 | META_DAILY_BUDGET_USD | no | Hard daily stop for AI spend in USD, default 10. |
 | SUPABASE_URL | yes | Project URL from Supabase Project Settings, API tab. |

@@ -52,9 +52,11 @@ import {
 } from "@/lib/telegram/replies";
 
 // Minimal structural view of a grammY context, so handler tests can pass tiny
-// fakes instead of building a real Bot.
+// fakes instead of building a real Bot. `me` is the bot's own user (getMe),
+// used to tell the bot's messages from everyone else's when a student replies.
 export type BotContextLike = {
   from?: User;
+  me?: { id: number };
   chat?: Chat;
   message?: Message;
   reply: (
@@ -377,6 +379,18 @@ async function passRateLimit(ctx: BotContextLike, deps: HandlerDeps, userId: str
   }
 }
 
+// Text of the message the student replied to, but only when it was sent by
+// this bot itself (reply_to_message.from.id equals the bot's own id). A reply
+// to a forwarded message or to another user's message is never used as
+// conversation context.
+function botRepliedTextOf(message: Message | undefined, botId: number | undefined): string | null {
+  const replied = message?.reply_to_message;
+  if (replied == null || botId == null) return null;
+  if (replied.from?.id !== botId) return null;
+  const text = (replied.text ?? replied.caption ?? "").trim();
+  return text.length > 0 ? text : null;
+}
+
 async function processMessage(ctx: BotContextLike, deps: HandlerDeps, spec: MessageSpec): Promise<void> {
   if (ctx.from === undefined) return;
 
@@ -463,11 +477,20 @@ async function processMessage(ctx: BotContextLike, deps: HandlerDeps, spec: Mess
       // last few turns so a follow up like "tuesday also" is read together
       // with the question it answers. Photos, documents and voice transcripts
       // are understood on their own and never touch the memory.
+      // A reply to one of Settle's own messages is context too: that message
+      // joins as a settle turn (never stored twice), so "why did you change
+      // the time?" is read together with the change it asks about.
+      const turns = [...memory.recent(user.id)];
+      const repliedTo = botRepliedTextOf(ctx.message, ctx.me?.id);
+      const lastSettle = [...turns].reverse().find((turn) => turn.role === "settle");
+      if (repliedTo != null && lastSettle?.text !== repliedTo) {
+        turns.push({ role: "settle", text: repliedTo });
+      }
       ingestInput = {
         user,
         upload,
         text: spec.text,
-        recentExchange: memory.recent(user.id),
+        recentExchange: turns,
       };
     }
 
@@ -500,13 +523,31 @@ async function processMessage(ctx: BotContextLike, deps: HandlerDeps, spec: Mess
     if (outcome.kind === "tasks") {
       text = summaryReply(outcome);
     } else if (outcome.kind === "nothing") {
-      text = outcome.clarification ?? nothingFoundReply();
+      // A plain answer to the student's question comes first; the model only
+      // produces one when no task action ran. A blank answer counts as none.
+      const answer = outcome.answer != null && outcome.answer.trim().length > 0 ? outcome.answer : null;
+      text = answer ?? outcome.clarification ?? nothingFoundReply();
     } else {
       // Legacy pending outcome; the default flow diagnoses math inline now.
       text = mathPendingReply();
     }
     if (ingestInput.pdf?.tooManyPages) {
       text = `${text}\n\n${pdfTruncatedNote()}`;
+    }
+    if (spec.kind === "text" && (outcome.kind === "tasks" || outcome.kind === "nothing")) {
+      // Settle's own reply joins the memory as a settle turn, so a follow up
+      // like "why did you change the time?" has the confirmation line at
+      // hand even when the student did not reply to the exact message. The
+      // generic nothing-found line carries no context, and the clarification
+      // is already stored above, so neither is stored twice.
+      const genericNothing =
+        outcome.kind === "nothing" &&
+        (outcome.answer == null || outcome.answer.trim().length === 0) &&
+        outcome.clarification == null;
+      const alreadyStored = outcome.kind === "nothing" && text === outcome.clarification;
+      if (!genericNothing && !alreadyStored) {
+        memory.remember(user.id, { role: "settle", text });
+      }
     }
 
     const keyboard = dashboardKeyboard(deps.appBaseUrl);

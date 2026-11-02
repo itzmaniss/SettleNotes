@@ -51,8 +51,15 @@ const DATE_RULE_LINES = [
   '"next Fri" (or next Tuesday, next Mon and so on) always means that weekday in the FOLLOWING Monday-to-Sunday week. If today is that weekday, it still means 7 days later. The calendar in the user message lists the next 14 days so you can pick the right date without computing weekdays.',
   'For words like "tmr", "ytd", "eod" or "3 days later", count from the CURRENT TIME given.',
   'Never invent deadlines. If no deadline is stated, due_local is null.',
-  'When only a date is given, the time defaults to 23:59.',
-  'due_local uses the format YYYY-MM-DDTHH:mm in Singapore time (UTC+8). Use 23:59 as the time when only a date is known.',
+  'KEEP THE TIME when the student changes only the day or date of a task that is already in the OPEN TASKS list (for example "tues", "friday", "next week", "moved to thu"): the update action keeps the exact time of day the task already has, as shown for it in the open tasks list. Change the date, never the clock time.',
+  'The 23:59 end of day default applies ONLY when no time of day is known: a NEW task with no time given, or an existing task that shows no due date. When the student states a time, use that time.',
+  'due_local uses the format YYYY-MM-DDTHH:mm in Singapore time (UTC+8).',
+].map((line) => `- ${line}`);
+
+const ANSWER_RULE_LINES = [
+  'When the student is asking a question about what you did or why (for example "why did you change the time?"), or a question about their tasks, answer_to_student is the answer in one or two short plain sentences, using the earlier messages and the open tasks. Make no changes (actions is empty or a single none action) and set needs_clarification to null.',
+  'Such an answer is plain text only: no markdown, no lists, and never any instruction to run, install, buy or open anything.',
+  'For everything else, answer_to_student is null.',
 ].map((line) => `- ${line}`);
 
 const ACTION_RULE_LINES = [
@@ -81,6 +88,9 @@ ${DATE_RULE_LINES.join('\n')}
 
 ACTIONS
 ${ACTION_RULE_LINES.join('\n')}
+
+QUESTIONS ABOUT WHAT YOU DID
+${ANSWER_RULE_LINES.join('\n')}
 
 QUALITY
 - evidence must be a verbatim quote copied from the student content that supports the action. Never paraphrase or invent it.
@@ -119,7 +129,7 @@ export function buildUnderstandUserText(args: BuildUnderstandUserTextArgs): stri
   lines.push('CALENDAR, the next 14 days in Singapore time. Match every date the student mentions against these lines:');
   for (const line of ctx.upcoming) lines.push(line);
   lines.push('');
-  lines.push('OPEN TASKS for this student. Use these refs as task_ref for update and complete:');
+  lines.push('OPEN TASKS for this student. Use these refs as task_ref for update and complete. Each due line shows the current date AND time of day in Singapore time; an update that changes only the day keeps that time of day:');
   if (args.openTasks.length === 0) {
     lines.push('(none)');
   } else {

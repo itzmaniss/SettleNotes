@@ -20,6 +20,26 @@ import { EmptyChecklistError } from "../../lib/starters/checklist";
 import { FlashcardsTooThinError, NoStudyMaterialError } from "../../lib/starters/flashcards";
 import { summaryReply } from "../../lib/telegram/replies";
 
+// ingest deps read the lazy env proxy (textModel/textEffort) at call time, and
+// bun auto-loads .env into process.env. Pin the vars here, exactly like
+// tests/media/storage.test.ts does, so whichever file parses env first in a
+// full run caches the same values for all of them.
+const PINNED_ENV: Record<string, string> = {
+  TELEGRAM_BOT_TOKEN: "test-token",
+  TELEGRAM_BOT_USERNAME: "settle_test_bot",
+  TELEGRAM_WEBHOOK_SECRET: "test-webhook-secret",
+  ALLOWED_TELEGRAM_IDS: "101",
+  MODEL_API_KEY: "test-model-key",
+  SUPABASE_URL: "https://test.supabase.co",
+  SUPABASE_SECRET_KEY: "test-supabase-key",
+  SUPABASE_DB_URL: "postgresql://test:***@localhost:5432/test",
+  SESSION_SECRET: "test-session-secret-0123456789",
+  SUPABASE_STORAGE_BUCKET: "test-bucket",
+};
+for (const [key, value] of Object.entries(PINNED_ENV)) process.env[key] = value;
+delete process.env.META_TEXT_MODEL;
+delete process.env.META_TEXT_EFFORT;
+
 const NOW = new Date("2026-10-28T09:00:00+08:00");
 // 1 Nov 2026 00:00 SGT, the reset instant used by the refused-claim fakes.
 const NOV_1_SGT = new Date("2026-10-31T16:00:00Z");
@@ -1032,6 +1052,7 @@ const BRIEF_OUTPUT: UnderstandOutput = {
     },
   ],
   needs_clarification: null,
+  answer_to_student: null,
 };
 
 const SLIDES_OUTPUT: UnderstandOutput = {
@@ -1039,6 +1060,7 @@ const SLIDES_OUTPUT: UnderstandOutput = {
   extracted_text: "photosynthesis slides",
   actions: [],
   needs_clarification: null,
+  answer_to_student: null,
 };
 
 const MATH_OUTPUT: UnderstandOutput = {
@@ -1046,6 +1068,7 @@ const MATH_OUTPUT: UnderstandOutput = {
   extracted_text: "x + 2 = 5",
   actions: [],
   needs_clarification: null,
+  answer_to_student: null,
 };
 
 function makeInput(overrides: Partial<IngestInput> = {}): IngestInput {

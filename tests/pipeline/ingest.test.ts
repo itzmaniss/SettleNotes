@@ -17,6 +17,28 @@ import type { StartersDeps } from "../../lib/pipeline/starters";
 import type { UnderstandOutput } from "../../lib/pipeline/understand";
 import { summaryReply } from "../../lib/telegram/replies";
 
+// ingest deps read the lazy env proxy (textModel/textEffort) at call time, and
+// bun auto-loads .env into process.env. Pin the vars here, exactly like
+// tests/media/storage.test.ts does, so whichever file parses env first in a
+// full run caches the same values for all of them.
+const PINNED_ENV: Record<string, string> = {
+  TELEGRAM_BOT_TOKEN: "test-token",
+  TELEGRAM_BOT_USERNAME: "settle_test_bot",
+  TELEGRAM_WEBHOOK_SECRET: "test-webhook-secret",
+  ALLOWED_TELEGRAM_IDS: "101",
+  MODEL_API_KEY: "test-model-key",
+  SUPABASE_URL: "https://test.supabase.co",
+  SUPABASE_SECRET_KEY: "test-supabase-key",
+  SUPABASE_DB_URL: "postgresql://test:***@localhost:5432/test",
+  SESSION_SECRET: "test-session-secret-0123456789",
+  SUPABASE_STORAGE_BUCKET: "test-bucket",
+};
+for (const [key, value] of Object.entries(PINNED_ENV)) process.env[key] = value;
+// The optional text model vars must be absent so the default behaviour (no
+// model override, effort low) is asserted against a known env.
+delete process.env.META_TEXT_MODEL;
+delete process.env.META_TEXT_EFFORT;
+
 const NOW = new Date("2026-10-28T09:00:00+08:00");
 // 1 Nov 2026 00:00 SGT, the reset instant used by the refused-claim fake.
 const NOV_1_SGT = new Date("2026-10-31T16:00:00Z");
@@ -140,6 +162,7 @@ const EXTEND_OUTPUT: UnderstandOutput = {
     },
   ],
   needs_clarification: null,
+  answer_to_student: null,
 };
 
 function makeInput(overrides: Partial<IngestInput> = {}): IngestInput {
@@ -217,6 +240,7 @@ describe("ingestContent: create, clarify and nothing branches", () => {
       },
     ],
     needs_clarification: null,
+    answer_to_student: null,
   };
 
   test("create path: inserts one task with capture origin and source upload, date-only due goes to 23:59", async () => {
@@ -256,6 +280,7 @@ describe("ingestContent: create, clarify and nothing branches", () => {
         EXTEND_OUTPUT.actions[0],
       ],
       needs_clarification: null,
+      answer_to_student: null,
     };
     const fakeDb = makeFakeDb();
     const { generateObject } = makeGenerateObject(two);
@@ -281,6 +306,7 @@ describe("ingestContent: create, clarify and nothing branches", () => {
         { ...CREATE_OUTPUT.actions[0], confidence: 0.3 },
       ],
       needs_clarification: null,
+      answer_to_student: null,
     };
     const fakeDb = makeFakeDb();
     const { generateObject } = makeGenerateObject(unsure);
@@ -352,6 +378,7 @@ describe("ingestContent: create, clarify and nothing branches", () => {
         { ...CREATE_OUTPUT.actions[0], confidence: 0.3 },
       ],
       needs_clarification: null,
+      answer_to_student: null,
     };
     const fakeDb = makeFakeDb();
     const { generateObject } = makeGenerateObject(unsure);
@@ -388,6 +415,7 @@ describe("ingestContent: create, clarify and nothing branches", () => {
         confidence: 0.3,
       })),
       needs_clarification: null,
+      answer_to_student: null,
     };
     const fakeDb = makeFakeDb();
     const { generateObject } = makeGenerateObject(five);
@@ -456,6 +484,7 @@ describe("ingestContent: create, clarify and nothing branches", () => {
         },
       ],
       needs_clarification: null,
+      answer_to_student: null,
     };
     const fakeDb = makeFakeDb();
     const { generateObject } = makeGenerateObject(mixed);
@@ -507,13 +536,18 @@ describe("ingestContent: create, clarify and nothing branches", () => {
       extracted_text: "x",
       actions: [],
       needs_clarification: "Which module is this deadline for?",
+      answer_to_student: null,
     };
     const fakeDb = makeFakeDb();
     const { generateObject } = makeGenerateObject(question);
     const deps: IngestDeps = { ...createIngestDeps(), generateObject, ...fakeDb, now: () => NOW };
 
     const outcome = await ingestContent(deps, makeInput({ text: "something vague" }));
-    expect(outcome).toEqual({ kind: "nothing", clarification: "Which module is this deadline for?" });
+    expect(outcome).toEqual({
+      kind: "nothing",
+      clarification: "Which module is this deadline for?",
+      answer: null,
+    });
     expect(fakeDb.finished).toHaveLength(1);
     expect(fakeDb.finished[0].patch.status).toBe("done");
   });
@@ -536,13 +570,14 @@ describe("ingestContent: create, clarify and nothing branches", () => {
         },
       ],
       needs_clarification: null,
+      answer_to_student: null,
     };
     const fakeDb = makeFakeDb();
     const { generateObject } = makeGenerateObject(unknown);
     const deps: IngestDeps = { ...createIngestDeps(), generateObject, ...fakeDb, now: () => NOW };
 
     const outcome = await ingestContent(deps, makeInput());
-    expect(outcome).toEqual({ kind: "nothing", clarification: null });
+    expect(outcome).toEqual({ kind: "nothing", clarification: null, answer: null });
     expect(fakeDb.inserts).toHaveLength(0);
     expect(fakeDb.updates).toHaveLength(0);
     expect(fakeDb.events).toHaveLength(0);
@@ -556,6 +591,7 @@ describe("ingestContent: create, clarify and nothing branches", () => {
         { ...CREATE_OUTPUT.actions[0], due_local: "2026-02-30T25:00" },
       ],
       needs_clarification: null,
+      answer_to_student: null,
     };
     const fakeDb = makeFakeDb();
     const { generateObject } = makeGenerateObject(bad);
@@ -584,6 +620,7 @@ describe("ingestContent: create, clarify and nothing branches", () => {
         },
       ],
       needs_clarification: null,
+      answer_to_student: null,
     };
     const fakeDb = makeFakeDb();
     const { generateObject } = makeGenerateObject(sneaky);
@@ -592,7 +629,7 @@ describe("ingestContent: create, clarify and nothing branches", () => {
     const outcome = await ingestContent(deps, makeInput());
     // 'task-1' is not a ref in refToTaskId, so the action maps to taskId null
     // and is dropped (no title to downgrade to a create).
-    expect(outcome).toEqual({ kind: "nothing", clarification: null });
+    expect(outcome).toEqual({ kind: "nothing", clarification: null, answer: null });
     expect(fakeDb.updates).toHaveLength(0);
     expect(fakeDb.inserts).toHaveLength(0);
   });
@@ -616,6 +653,7 @@ describe("ingestContent: starter wiring end to end", () => {
       },
     ],
     needs_clarification: null,
+    answer_to_student: null,
   };
 
   function makeStarterDepsFake(generateObject: MetaClient["generateObject"]) {
@@ -777,6 +815,7 @@ describe("ingestContent: starter wiring end to end", () => {
       extracted_text: "x + 2 = 5",
       actions: [],
       needs_clarification: null,
+      answer_to_student: null,
     };
     const DIAGNOSIS = {
       steps: [
@@ -890,6 +929,7 @@ describe("ingestContent: math working and errors", () => {
     extracted_text: "x + 2 = 5, so x = 5",
     actions: [],
     needs_clarification: null,
+    answer_to_student: null,
   };
 
   test("math_working: no reconcile, no writes, hook called, upload done as math_working", async () => {
@@ -935,5 +975,220 @@ describe("ingestContent: math working and errors", () => {
     await expect(ingestContent(deps, makeInput())).rejects.toThrow("Meta API down");
     expect(fakeDb.finished).toHaveLength(0);
     expect(fakeDb.inserts).toHaveLength(0);
+  });
+});
+
+describe("ingestContent: answer_to_student and the time keeping seam", () => {
+  const ANSWER_OUTPUT: UnderstandOutput = {
+    input_kind: "plain_message",
+    extracted_text: "why did you change the time?",
+    actions: [],
+    needs_clarification: null,
+    answer_to_student: "I only moved the date; the 11pm time stayed.",
+  };
+
+  test("an answer passes through to the nothing outcome when no action ran", async () => {
+    const fakeDb = makeFakeDb([]);
+    const { generateObject } = makeGenerateObject(ANSWER_OUTPUT);
+    const deps: IngestDeps = { ...createIngestDeps(), generateObject, ...fakeDb, now: () => NOW };
+
+    const outcome = await ingestContent(deps, makeInput({ text: "why did you change the time?" }));
+
+    expect(outcome).toEqual({
+      kind: "nothing",
+      clarification: null,
+      answer: "I only moved the date; the 11pm time stayed.",
+    });
+  });
+
+  test("an answer that arrives with a real action is dropped: actions win", async () => {
+    const fakeDb = makeFakeDb();
+    const { generateObject } = makeGenerateObject({
+      ...ANSWER_OUTPUT,
+      actions: [
+        {
+          type: "update",
+          task_ref: "T1",
+          title: null,
+          course: null,
+          kind: null,
+          due_local: "2026-11-06T23:59",
+          effort: null,
+          evidence: "extend lab 4",
+          confidence: 0.9,
+        },
+      ],
+    });
+    const deps: IngestDeps = { ...createIngestDeps(), generateObject, ...fakeDb, now: () => NOW };
+
+    const outcome = await ingestContent(deps, makeInput());
+
+    expect(outcome.kind).toBe("tasks");
+    if (outcome.kind === "tasks") expect(outcome.answer).toBeNull();
+    expect(fakeDb.updates).toHaveLength(1);
+  });
+
+  test("a day-only update due_local keeps the task's existing time of day", async () => {
+    // MA2001 tutorial due Tue 3 Nov, 11:00pm SGT. The student just says "tues"
+    // and the model (slipping) returns a date without a time.
+    const tutorial: TaskRow = {
+      ...openTask,
+      id: "task-1",
+      title: "MA2001 tutorial",
+      course: "MA2001",
+      kind: "other",
+      due_at: "2026-11-03T15:00:00.000Z",
+    };
+    const fakeDb = makeFakeDb([tutorial]);
+    const { generateObject } = makeGenerateObject({
+      input_kind: "plain_message",
+      extracted_text: "tues",
+      actions: [
+        {
+          type: "update",
+          task_ref: "T1",
+          title: null,
+          course: null,
+          kind: null,
+          due_local: "2026-11-10",
+          effort: null,
+          evidence: "tues",
+          confidence: 0.9,
+        },
+      ],
+      needs_clarification: null,
+      answer_to_student: null,
+    });
+    const deps: IngestDeps = { ...createIngestDeps(), generateObject, ...fakeDb, now: () => NOW };
+
+    await ingestContent(deps, makeInput({ text: "tues" }));
+
+    // Tue 10 Nov at 11:00pm SGT, not the 23:59 end of day default.
+    expect(fakeDb.updates).toHaveLength(1);
+    expect(fakeDb.updates[0].patch.dueAt).toBe("2026-11-10T15:00:00.000Z");
+  });
+
+  test("a day-only update for a task with no due date keeps the 23:59 default", async () => {
+    const noDeadline: TaskRow = { ...openTask, due_at: null };
+    const fakeDb = makeFakeDb([noDeadline]);
+    const { generateObject } = makeGenerateObject({
+      input_kind: "plain_message",
+      extracted_text: "friday",
+      actions: [
+        {
+          type: "update",
+          task_ref: "T1",
+          title: null,
+          course: null,
+          kind: null,
+          due_local: "2026-11-06",
+          effort: null,
+          evidence: "friday",
+          confidence: 0.9,
+        },
+      ],
+      needs_clarification: null,
+      answer_to_student: null,
+    });
+    const deps: IngestDeps = { ...createIngestDeps(), generateObject, ...fakeDb, now: () => NOW };
+
+    await ingestContent(deps, makeInput({ text: "friday" }));
+
+    // 23:59 SGT is 15:59Z the same day; the end of day default stands.
+    expect(fakeDb.updates[0].patch.dueAt).toBe("2026-11-06T15:59:00.000Z");
+  });
+
+  test("a day-only create still gets the 23:59 end of day default", async () => {
+    const fakeDb = makeFakeDb([]);
+    const { generateObject } = makeGenerateObject({
+      input_kind: "plain_message",
+      extracted_text: "got quiz 2 on tue",
+      actions: [
+        {
+          type: "create",
+          task_ref: null,
+          title: "MA2001 Quiz 2",
+          course: "MA2001",
+          kind: "test",
+          due_local: "2026-11-10",
+          effort: null,
+          evidence: "got quiz 2 on tue",
+          confidence: 0.9,
+        },
+      ],
+      needs_clarification: null,
+      answer_to_student: null,
+    });
+    const deps: IngestDeps = { ...createIngestDeps(), generateObject, ...fakeDb, now: () => NOW };
+
+    await ingestContent(deps, makeInput({ text: "got quiz 2 on tue" }));
+
+    expect(fakeDb.inserts).toHaveLength(1);
+    expect(fakeDb.inserts[0].dueAt).toBe("2026-11-10T15:59:00.000Z");
+  });
+});
+
+describe("ingestContent: text model override", () => {
+  const NO_OVERRIDE_DEPS: IngestDeps = {
+    generateObject: makeGenerateObject(EXTEND_OUTPUT).generateObject,
+    listOpenTasks: async () => [openTask],
+    executeOps: () => Promise.resolve({ created: [], updated: [], completed: [], clarify: [] }),
+    finishUpload: async () => {},
+    insertPendingAction: async (i) => ({
+      id: "pending-1",
+      user_id: i.userId,
+      upload_id: i.uploadId,
+      kind: i.kind,
+      task_id: i.taskId,
+      payload: i.payload,
+      status: "pending",
+      expires_at: "2026-10-29T01:00:00.000Z",
+      created_at: NOW.toISOString(),
+      resolved_at: null,
+    }),
+    now: () => NOW,
+  };
+
+  test("without options the understand call keeps effort low and no model key", async () => {
+    const { generateObject, calls } = makeGenerateObject(EXTEND_OUTPUT);
+    const deps: IngestDeps = { ...NO_OVERRIDE_DEPS, generateObject, listOpenTasks: async () => [openTask] };
+
+    await ingestContent(deps, makeInput());
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].effort).toBe("low");
+    expect("model" in calls[0] ? calls[0].model : undefined).toBeUndefined();
+  });
+
+  test("textModel and textEffort reach the understand call for text input", async () => {
+    const { generateObject, calls } = makeGenerateObject(EXTEND_OUTPUT);
+    const deps: IngestDeps = {
+      ...NO_OVERRIDE_DEPS,
+      generateObject,
+      listOpenTasks: async () => [openTask],
+      textModel: "muse-spark-1.2",
+      textEffort: "minimal",
+    };
+
+    await ingestContent(deps, makeInput());
+
+    expect(calls[0].effort).toBe("minimal");
+    expect(calls[0].model).toBe("muse-spark-1.2");
+  });
+
+  test("image input never uses the override: default model path, effort medium", async () => {
+    const { generateObject, calls } = makeGenerateObject(EXTEND_OUTPUT);
+    const deps: IngestDeps = {
+      ...NO_OVERRIDE_DEPS,
+      generateObject,
+      listOpenTasks: async () => [openTask],
+      textModel: "muse-spark-1.2",
+      textEffort: "minimal",
+    };
+
+    await ingestContent(deps, makeInput({ image: { base64: "aGk=", mimeType: "image/jpeg" }, text: null }));
+
+    expect(calls[0].effort).toBe("medium");
+    expect("model" in calls[0] ? calls[0].model : undefined).toBeUndefined();
   });
 });

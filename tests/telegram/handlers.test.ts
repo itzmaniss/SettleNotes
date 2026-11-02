@@ -27,6 +27,7 @@ import {
   fileTooLargeReply,
   heardPrefix,
   mathPendingReply,
+  nothingFoundReply,
   pdfTruncatedNote,
   rateLimitReply,
   REFUSAL_TEXT,
@@ -770,6 +771,8 @@ describe("voice notes", () => {
     expect(ingestInput.text).toBe(TRANSCRIPT);
     expect(ingestInput.image).toBeUndefined();
     expect(ingestInput.pdf).toBeUndefined();
+    // Voice is understood on its own; it never reads or writes the memory.
+    expect("recentExchange" in (ingests[0] as Record<string, unknown>)).toBe(false);
 
     expect(spy.replies).toHaveLength(1);
     expect(spy.replies[0].text).toBe(
@@ -1211,5 +1214,218 @@ describe("short term conversation memory", () => {
 
     expect("recentExchange" in (dDoc.ingests[0] as Record<string, unknown>)).toBe(false);
     expect(memory.recent("user-1")).toEqual([]);
+  });
+});
+
+describe("answers to student questions", () => {
+  function ctxAsking(question: string, id: number): CtxSpy {
+    return makeCtx({ text: question, message_id: id, date: 1, chat: { id: 101, type: "private" }, from: { id: 101, is_bot: false, first_name: "Tim" } });
+  }
+  const ANSWER = "I only moved the date; the 11pm time stayed the same.";
+
+  test("an answer with no actions is sent instead of the nothing-found line", async () => {
+    const spy = ctxAsking("why did you change the time?", 71);
+    const { deps } = makeDeps({
+      ingestOutcome: { kind: "nothing", clarification: null, answer: ANSWER },
+    });
+
+    await handleTextMessage(spy.ctx, deps);
+
+    expect(spy.replies).toHaveLength(1);
+    expect(spy.replies[0].text).toBe(ANSWER);
+    expect(spy.replies[0].text).not.toBe(nothingFoundReply());
+  });
+
+  test("the answer goes out as a reply to the student's message", async () => {
+    const spy = ctxAsking("why did you change the time?", 72);
+    const { deps } = makeDeps({
+      ingestOutcome: { kind: "nothing", clarification: null, answer: ANSWER },
+    });
+
+    await handleTextMessage(spy.ctx, deps);
+
+    expect(spy.replies[0].other?.reply_parameters).toEqual({
+      message_id: 72,
+      allow_sending_without_reply: true,
+    });
+  });
+
+  test("with real actions the normal summary is sent and any answer is ignored", async () => {
+    const spy = ctxAsking("why did you change the time?", 73);
+    const { deps } = makeDeps({
+      ingestOutcome: {
+        kind: "tasks",
+        result: { created: [createdTask], updated: [], completed: [], clarify: [] },
+        clarification: null,
+        answer: ANSWER,
+        inputKind: "plain_message",
+        pdfTruncated: false,
+        starter: null,
+        pendingPrompts: [],
+      },
+    });
+
+    await handleTextMessage(spy.ctx, deps);
+
+    expect(spy.replies).toHaveLength(1);
+    expect(spy.replies[0].text).toBe("Added 1 task:\n- CS2030 Lab 4 (due Fri 6 Nov, 11:59pm)");
+    expect(spy.replies[0].text).not.toContain(ANSWER);
+  });
+
+  test("a blank answer falls back to the clarification, then the nothing-found line", async () => {
+    const spyClarify = ctxAsking("why?", 74);
+    const d1 = makeDeps({ ingestOutcome: { kind: "nothing", clarification: "Which task do you mean?", answer: "   " } });
+    await handleTextMessage(spyClarify.ctx, d1.deps);
+    expect(spyClarify.replies[0].text).toBe("Which task do you mean?");
+
+    const spyNone = ctxAsking("why?", 75);
+    const d2 = makeDeps({ ingestOutcome: { kind: "nothing", clarification: null, answer: "" } });
+    await handleTextMessage(spyNone.ctx, d2.deps);
+    expect(spyNone.replies[0].text).toBe(nothingFoundReply());
+  });
+});
+
+describe("replies to Settle's own messages become context", () => {
+  const BOT_ID = 424242;
+  const CONFIRMATION = "Moved MA2001 tutorial to Tue 10 Nov, 11:59pm (was Tue 3 Nov, 11:00pm)";
+  const QUESTION = "why did you change the time?";
+
+  function ctxReplyingTo(repliedFromId: number | undefined, replied: Record<string, unknown>, id: number, opts: { me?: boolean } = {}): CtxSpy {
+    const spy = makeCtx({
+      text: QUESTION,
+      message_id: id,
+      reply_to_message: {
+        message_id: 1,
+        ...(repliedFromId === undefined ? {} : { from: { id: repliedFromId, is_bot: true, first_name: "Settle" } }),
+        ...replied,
+      },
+      date: 1,
+      chat: { id: 101, type: "private" },
+      from: { id: 101, is_bot: false, first_name: "Tim" },
+    });
+    if (opts.me !== false) spy.ctx.me = { id: BOT_ID };
+    return spy;
+  }
+
+  test("a reply to one of Settle's own messages joins as the last settle turn", async () => {
+    const memory = createConversationMemory({ now: () => 0 });
+    const spy = ctxReplyingTo(BOT_ID, { text: CONFIRMATION }, 76);
+    const { deps, ingests } = makeDeps({
+      conversation: memory,
+      ingestOutcome: { kind: "nothing", clarification: null, answer: null },
+    });
+
+    await handleTextMessage(spy.ctx, deps);
+
+    expect((ingests[0] as { recentExchange?: unknown }).recentExchange).toEqual([
+      { role: "settle", text: CONFIRMATION },
+    ]);
+    // Context only: the replied-to line is never stored as its own memory turn.
+    expect(memory.recent("user-1")).toEqual([{ role: "student", text: QUESTION }]);
+  });
+
+  test("a replied-to photo caption counts the same way", async () => {
+    const memory = createConversationMemory({ now: () => 0 });
+    const spy = ctxReplyingTo(BOT_ID, { caption: CONFIRMATION }, 77);
+    const { deps, ingests } = makeDeps({
+      conversation: memory,
+      ingestOutcome: { kind: "nothing", clarification: null, answer: null },
+    });
+
+    await handleTextMessage(spy.ctx, deps);
+
+    expect((ingests[0] as { recentExchange?: unknown }).recentExchange).toEqual([
+      { role: "settle", text: CONFIRMATION },
+    ]);
+  });
+
+  test("a reply to someone else's message is never used as context", async () => {
+    const memory = createConversationMemory({ now: () => 0 });
+    const spy = ctxReplyingTo(999, { text: "a stranger's message" }, 78);
+    const { deps, ingests } = makeDeps({
+      conversation: memory,
+      ingestOutcome: { kind: "nothing", clarification: null, answer: null },
+    });
+
+    await handleTextMessage(spy.ctx, deps);
+
+    expect((ingests[0] as { recentExchange?: unknown }).recentExchange).toEqual([]);
+  });
+
+  test("a reply whose bot sender is unknown to us is not used either", async () => {
+    const memory = createConversationMemory({ now: () => 0 });
+    const spy = ctxReplyingTo(BOT_ID, { text: CONFIRMATION }, 79, { me: false });
+    const { deps, ingests } = makeDeps({
+      conversation: memory,
+      ingestOutcome: { kind: "nothing", clarification: null, answer: null },
+    });
+
+    await handleTextMessage(spy.ctx, deps);
+
+    expect((ingests[0] as { recentExchange?: unknown }).recentExchange).toEqual([]);
+  });
+
+  test("the replied-to line is not appended twice when memory already ends with it", async () => {
+    const memory = createConversationMemory({ now: () => 0 });
+    memory.remember("user-1", { role: "settle", text: CONFIRMATION });
+    const spy = ctxReplyingTo(BOT_ID, { text: CONFIRMATION }, 80);
+    const { deps, ingests } = makeDeps({
+      conversation: memory,
+      ingestOutcome: { kind: "nothing", clarification: null, answer: null },
+    });
+
+    await handleTextMessage(spy.ctx, deps);
+
+    expect((ingests[0] as { recentExchange?: unknown }).recentExchange).toEqual([
+      { role: "settle", text: CONFIRMATION },
+    ]);
+  });
+});
+
+describe("Settle's replies join the conversation memory", () => {
+  function ctxSaying(text: string, id: number): CtxSpy {
+    return makeCtx({ text, message_id: id, date: 1, chat: { id: 101, type: "private" }, from: { id: 101, is_bot: false, first_name: "Tim" } });
+  }
+
+  test("after a successful change the confirmation line is remembered as a settle turn", async () => {
+    const memory = createConversationMemory({ now: () => 0 });
+    const spy = ctxSaying("prof changed 2001 tut to nex week liao", 81);
+    const { deps } = makeDeps({ conversation: memory });
+
+    await handleTextMessage(spy.ctx, deps);
+
+    expect(memory.recent("user-1")).toEqual([
+      { role: "student", text: "prof changed 2001 tut to nex week liao" },
+      { role: "settle", text: "Added 1 task:\n- CS2030 Lab 4 (due Fri 6 Nov, 11:59pm)" },
+    ]);
+  });
+
+  test("a plain answer is remembered so a follow up question has material", async () => {
+    const memory = createConversationMemory({ now: () => 0 });
+    const spy = ctxSaying("why did you change the time?", 82);
+    const { deps } = makeDeps({
+      conversation: memory,
+      ingestOutcome: { kind: "nothing", clarification: null, answer: "I only moved the date; the time stayed." },
+    });
+
+    await handleTextMessage(spy.ctx, deps);
+
+    expect(memory.recent("user-1")).toEqual([
+      { role: "student", text: "why did you change the time?" },
+      { role: "settle", text: "I only moved the date; the time stayed." },
+    ]);
+  });
+
+  test("the generic nothing-found line carries no context and is not remembered", async () => {
+    const memory = createConversationMemory({ now: () => 0 });
+    const spy = ctxSaying("hehe nice one la", 83);
+    const { deps } = makeDeps({
+      conversation: memory,
+      ingestOutcome: { kind: "nothing", clarification: null, answer: null },
+    });
+
+    await handleTextMessage(spy.ctx, deps);
+
+    expect(memory.recent("user-1")).toEqual([{ role: "student", text: "hehe nice one la" }]);
   });
 });

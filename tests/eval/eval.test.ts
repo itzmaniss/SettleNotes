@@ -15,6 +15,7 @@ import {
   matchUnderstand,
   parseEvalArgs,
   resolveAttachments,
+  evalHeader,
   type LoadedFixture,
   type UnderstandFixture,
 } from "../../scripts/eval-match";
@@ -42,6 +43,7 @@ function output(overrides: Partial<UnderstandOutput> = {}): UnderstandOutput {
     extracted_text: "prof say extend lab 4",
     actions: [],
     needs_clarification: null,
+    answer_to_student: null,
     ...overrides,
   };
 }
@@ -200,6 +202,39 @@ describe("matchUnderstand", () => {
       true,
     );
   });
+
+  test("expect_answer true passes when the model answers and takes no action", () => {
+    const m = matchUnderstand(
+      { actions: [], needs_clarification: false, expect_answer: true },
+      output({ answer_to_student: "I only moved the date; the 11pm time stayed." }),
+    );
+    expect(m.pass).toBe(true);
+    expect(m.reasons).toEqual([]);
+  });
+
+  test("expect_answer true fails when the model gives no answer", () => {
+    const m = matchUnderstand({ actions: [], needs_clarification: false, expect_answer: true }, output());
+    expect(m.pass).toBe(false);
+    expect(m.reasons[0]).toContain("answer_to_student");
+  });
+
+  test("expect_answer true fails on a whitespace-only answer too", () => {
+    const m = matchUnderstand(
+      { actions: [], needs_clarification: false, expect_answer: true },
+      output({ answer_to_student: "   " }),
+    );
+    expect(m.pass).toBe(false);
+    expect(m.reasons[0]).toContain("answer_to_student");
+  });
+
+  test("expect_answer true with a real action fails on the no-actions rule", () => {
+    const m = matchUnderstand(
+      { actions: [], needs_clarification: false, expect_answer: true },
+      output({ answer_to_student: "Here is why.", actions: [action()] }),
+    );
+    expect(m.pass).toBe(false);
+    expect(m.reasons.some((r) => r.includes("expected no actions, model emitted 1"))).toBe(true);
+  });
 });
 
 describe("fixture loader", () => {
@@ -243,6 +278,23 @@ describe("fixture loader", () => {
     }),
   );
   writeFileSync(join(root, "real", "understand", "labels.json"), JSON.stringify({ note: "not a fixture" }));
+  writeFileSync(
+    join(root, "real", "understand", "d-followup.json"),
+    JSON.stringify({
+      id: "followup",
+      now: "2026-11-02T11:23:00+08:00",
+      text: "tues",
+      recentExchange: [
+        { role: "student", text: "prof changed 2001 tut to nex week already liao" },
+        { role: "settle", text: "Which date next week is the MA2001 tutorial due now?" },
+      ],
+      expected: {
+        actions: [{ type: "update", task_ref: "T1", due_local: "2026-11-10T23:00" }],
+        needs_clarification: false,
+        expect_answer: false,
+      },
+    }),
+  );
   mkdirSync(join(root, "math"), { recursive: true });
   writeFileSync(
     join(root, "math", "01-diagnosis.json"),
@@ -260,8 +312,18 @@ describe("fixture loader", () => {
 
   test("loads both dirs, sorted by filename, real dir included, labels.json skipped", () => {
     const fixtures = loadFixtures("understand", { fixturesRoot: root });
-    expect(fixtures.map((f) => f.id)).toEqual(["plain-none", "extend-nxt-fri", "real-screenshot"]);
-    expect(fixtures.map((f) => f.sourceDir)).toEqual(["fixtures", "fixtures", "real"]);
+    expect(fixtures.map((f) => f.id)).toEqual(["plain-none", "extend-nxt-fri", "real-screenshot", "followup"]);
+    expect(fixtures.map((f) => f.sourceDir)).toEqual(["fixtures", "fixtures", "real", "real"]);
+  });
+
+  test("recentExchange and expect_answer validate and survive loading", () => {
+    const fixtures = loadFixtures("understand", { fixturesRoot: root });
+    const followup = fixtures.find((f) => f.id === "followup")!.fixture as unknown as UnderstandFixture;
+    expect(followup.recentExchange).toEqual([
+      { role: "student", text: "prof changed 2001 tut to nex week already liao" },
+      { role: "settle", text: "Which date next week is the MA2001 tutorial due now?" },
+    ]);
+    expect(followup.expected.expect_answer).toBe(false);
   });
 
   test("limit applies after sorting", () => {
@@ -423,6 +485,22 @@ describe("cost totals", () => {
     expect(formatUsd(0)).toBe("$0.00");
     expect(formatUsd(0.0083)).toBe("$0.0083");
     expect(formatUsd(0.03)).toBe("$0.03");
+  });
+});
+
+describe("eval header", () => {
+  test("unset text vars keep today's behaviour in the wording", () => {
+    const lines = evalHeader("muse-spark-1.3", null, null);
+    expect(lines).toEqual([
+      "model: muse-spark-1.3 (effort medium for image and pdf calls)",
+      "text only: muse-spark-1.3 (META_TEXT_MODEL unset) at effort low (META_TEXT_EFFORT unset)",
+    ]);
+  });
+
+  test("a configured text model and effort are named up front", () => {
+    const lines = evalHeader("muse-spark-1.3", "muse-spark-1.2", "minimal");
+    expect(lines[0]).toBe("model: muse-spark-1.3 (effort medium for image and pdf calls)");
+    expect(lines[1]).toBe("text only: muse-spark-1.2 at effort minimal");
   });
 });
 

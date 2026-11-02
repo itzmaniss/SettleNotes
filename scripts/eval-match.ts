@@ -45,9 +45,17 @@ export const understandFixtureSchema = z.object({
   text: z.string().nullish(),
   image: z.string().optional(),
   pdf: z.string().optional(),
+  // Earlier turns of the conversation, oldest first, so follow up fixtures
+  // (for example "tues" after a which-date question) are measured too.
+  recentExchange: z
+    .array(z.object({ role: z.enum(["student", "settle"]), text: z.string() }))
+    .optional(),
   expected: z.object({
     actions: z.array(expectedActionSchema).default([]),
     needs_clarification: z.boolean(),
+    // True means the model must answer in plain words (non-empty
+    // answer_to_student) and take no action.
+    expect_answer: z.boolean().optional(),
   }),
 });
 
@@ -219,7 +227,7 @@ function mismatchHint(exp: ExpectedAction, pool: UnderstandAction[], used: Set<n
 }
 
 export function matchUnderstand(
-  expected: { actions: ExpectedAction[]; needs_clarification: boolean },
+  expected: { actions: ExpectedAction[]; needs_clarification: boolean; expect_answer?: boolean },
   actual: UnderstandOutput,
 ): MatchResult {
   const reasons: string[] = [];
@@ -257,6 +265,19 @@ export function matchUnderstand(
   }
   if (!expected.needs_clarification && asked) {
     reasons.push(`needs_clarification: model asked "${truncate(actual.needs_clarification ?? "", 80)}" but fixture expects none`);
+  }
+
+  if (expected.expect_answer) {
+    const answered =
+      typeof actual.answer_to_student === "string" && actual.answer_to_student.trim().length > 0;
+    if (!answered) {
+      reasons.push("answer_to_student: expected a plain answer, model gave none");
+    }
+    // Only for a contradictory fixture (expect_answer plus listed actions);
+    // with an empty action list the generic no-actions check above reports.
+    if (pool.length > 0 && expectedActions.length > 0) {
+      reasons.push(`expect_answer: expected no actions, model emitted ${pool.length}: ${pool.map(describeAction).join("; ")}`);
+    }
   }
 
   return { pass: reasons.length === 0, reasons };
@@ -429,4 +450,18 @@ export function dryRunReport(input: {
 
 export function buildLiveCommand(suite: string, limit: number | null): string {
   return `bun run eval -- ${suite}${limit != null ? ` --limit ${limit}` : ""} --live`;
+}
+
+// The live run's header lines: which model and effort each kind of call uses,
+// so a run with META_TEXT_MODEL set says so up front. Unset text vars keep
+// today's behaviour (client default model at effort low).
+export function evalHeader(
+  metaModel: string,
+  textModel: string | null | undefined,
+  textEffort: string | null | undefined,
+): string[] {
+  return [
+    `model: ${metaModel} (effort medium for image and pdf calls)`,
+    `text only: ${textModel ?? `${metaModel} (META_TEXT_MODEL unset)`} at effort ${textEffort ?? "low (META_TEXT_EFFORT unset)"}`,
+  ];
 }

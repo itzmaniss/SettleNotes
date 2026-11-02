@@ -1,0 +1,26 @@
+{
+  "id": "answer-why-change-time",
+  "description": "Student asks why the time changed after a move: the model must answer in plain words and take no action",
+  "now": "2026-11-02T11:23:00+08:00",
+  "openTasks": [
+    {
+      "id": "task-1",
+      "title": "MA2001 tutorial",
+      "course": "MA2001",
+      "kind": "other",
+      "due_at": "2026-11-02T15:59:00.000Z"
+    }
+  ],
+  "text": "why did you change the time?",
+  "recentExchange": [
+    {
+      "role": "settle",
+      "text": "Moved MA2001 tutorial to Tue 10 Nov, 11:59pm (was Tue 3 Nov, 11:00pm)"
+    }
+  ],
+  "expected": {
+    "actions": [],
+    "needs_clarification": false,
+    "expect_answer": true
+  }
+}

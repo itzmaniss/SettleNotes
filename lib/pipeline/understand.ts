@@ -1,4 +1,4 @@
-import type { InputPart, MetaClient, Usage } from '@/lib/meta/client';
+import type { InputPart, MetaClient, ReasoningEffort, Usage } from '@/lib/meta/client';
 import {
   buildUnderstandUserText,
   UNDERSTAND_SYSTEM_PROMPT,
@@ -30,6 +30,9 @@ export type UnderstandOutput = {
   extracted_text: string;
   actions: UnderstandAction[];
   needs_clarification: string | null;
+  // Plain-text answer for questions about what Settle did or about the open
+  // tasks. Null whenever any real action was returned (actions win).
+  answer_to_student: string | null;
 };
 
 export type UnderstandOpenTask = {
@@ -50,6 +53,12 @@ export type UnderstandArgs = {
   // Earlier turns of this conversation, oldest first, so a short follow up is
   // read together with the question it answers. Only ever plain text messages.
   recentExchange?: ConversationTurn[];
+  // Optional faster model for text only calls (no image, no pdf). When unset
+  // the client's default model is used, exactly as before. Never applied to
+  // image or pdf calls, which stay on the default model at effort medium.
+  textModel?: string;
+  // Optional reasoning effort for text only calls. Unset means 'low'.
+  textEffort?: ReasoningEffort;
 };
 
 export type UnderstandResult = {
@@ -89,14 +98,35 @@ export const UnderstandOutputSchema: z.ZodType<UnderstandOutput> = z.strictObjec
   extracted_text: z.string(),
   actions: z.array(UnderstandActionSchema),
   needs_clarification: z.string().nullable(),
+  answer_to_student: z.string().nullable(),
 });
+
+// Guard rails for the plain-text answer: one line of plain text, capped, and
+// never sent when the model also produced a real action (actions win). An
+// empty or whitespace-only answer counts as none.
+const ANSWER_MAX_CHARS = 400;
+
+function hasRealAction(actions: UnderstandAction[]): boolean {
+  return actions.some((action) => action.type !== 'none');
+}
+
+function normaliseAnswer(answer: string | null, actions: UnderstandAction[]): string | null {
+  if (answer == null || hasRealAction(actions)) return null;
+  const flat = answer.trim().replace(/\s+/g, ' ');
+  if (flat.length === 0) return null;
+  return flat.length > ANSWER_MAX_CHARS ? flat.slice(0, ANSWER_MAX_CHARS) : flat;
+}
 
 function clampConfidence(output: UnderstandOutput): UnderstandOutput {
   const actions = output.actions.map((action) => ({
     ...action,
     confidence: Math.min(1, Math.max(0, action.confidence)),
   }));
-  return { ...output, actions };
+  return {
+    ...output,
+    actions,
+    answer_to_student: normaliseAnswer(output.answer_to_student, actions),
+  };
 }
 
 export async function understand(
@@ -136,6 +166,8 @@ export async function understand(
   }
 
   const hasDocument = args.image != null || args.pdf != null;
+  // Text only calls may run on the faster configured text model; image and
+  // pdf calls always stay on the default model at effort medium.
   const { data, usage } = await deps.generateObject({
     purpose: 'understand',
     userId: args.userId,
@@ -143,7 +175,8 @@ export async function understand(
     schemaName: UNDERSTAND_SCHEMA_NAME,
     system: UNDERSTAND_SYSTEM_PROMPT,
     input,
-    effort: hasDocument ? 'medium' : 'low',
+    effort: hasDocument ? 'medium' : (args.textEffort ?? 'low'),
+    ...(hasDocument || args.textModel == null ? {} : { model: args.textModel }),
   });
 
   return { output: clampConfidence(data), refToTaskId, usage };

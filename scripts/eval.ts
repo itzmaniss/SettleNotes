@@ -15,6 +15,7 @@ import {
   matchUnderstand,
   parseEvalArgs,
   resolveAttachments,
+  evalHeader,
   type AnyLoadedFixture,
   type DryRunFixtureInfo,
   type UnderstandFixture,
@@ -55,7 +56,10 @@ function imageMimeType(file: string): string {
   return "image/jpeg";
 }
 
-function buildUnderstandArgs(f: AnyLoadedFixture): UnderstandArgs {
+function buildUnderstandArgs(
+  f: AnyLoadedFixture,
+  opts: { textModel?: string; textEffort?: "minimal" | "low" | "medium" } = {},
+): UnderstandArgs {
   const fx = f.fixture as UnderstandFixture;
   const attachments = resolveAttachments(fx, dirnameOf(f));
   return {
@@ -74,6 +78,11 @@ function buildUnderstandArgs(f: AnyLoadedFixture): UnderstandArgs {
     pdf: attachments.pdf
       ? { base64: readFileSync(attachments.pdf).toString("base64"), filename: basename(attachments.pdf) }
       : undefined,
+    recentExchange: fx.recentExchange?.map((turn) => ({ role: turn.role, text: turn.text })),
+    // From META_TEXT_MODEL / META_TEXT_EFFORT so the same env vars steer the
+    // eval and the bot. Undefined here means the defaults, exactly as before.
+    ...(opts.textModel != null ? { textModel: opts.textModel } : {}),
+    ...(opts.textEffort != null ? { textEffort: opts.textEffort } : {}),
   };
 }
 
@@ -85,6 +94,10 @@ async function runUnderstandLive(fixtures: AnyLoadedFixture[], opts: { maxUsd: n
     import("../lib/pipeline/understand"),
   ]);
   const e = envMod.getEnv();
+  // The optional text-only speed setting; unset values keep today's behaviour
+  // (client default model at effort low).
+  const textModel = e.META_TEXT_MODEL;
+  const textEffort = e.META_TEXT_EFFORT;
   const totals = createTotals();
   const openai = metaMod.createOpenAIClient(e.MODEL_API_KEY, e.META_API_BASE_URL);
   const client = metaMod.createMetaClient({
@@ -98,6 +111,9 @@ async function runUnderstandLive(fixtures: AnyLoadedFixture[], opts: { maxUsd: n
     },
     getTodaySpend: async () => totals.costUsd,
   });
+
+  console.log(evalHeader(e.META_MODEL, textModel, textEffort).join("\n"));
+  console.log("");
 
   let passed = 0;
   let failed = 0;
@@ -113,7 +129,10 @@ async function runUnderstandLive(fixtures: AnyLoadedFixture[], opts: { maxUsd: n
     }
     const fx = f.fixture as UnderstandFixture;
     try {
-      const result = await understand({ generateObject: client.generateObject }, buildUnderstandArgs(f));
+      const result = await understand(
+        { generateObject: client.generateObject },
+        buildUnderstandArgs(f, { ...(textModel != null ? { textModel } : {}), ...(textEffort != null ? { textEffort } : {}) }),
+      );
       const match = matchUnderstand(fx.expected, result.output);
       if (match.pass) {
         passed += 1;

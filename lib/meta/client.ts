@@ -49,6 +49,10 @@ export type GenerateObjectOptions<T> = {
   system: string;
   input: InputPart[];
   effort: ReasoningEffort;
+  // Per call model override. Unset or null means the client's default model.
+  // Unknown model ids still price at the Spark rates; ai_calls records the
+  // model actually used either way.
+  model?: string;
   timeoutMs?: number;
 };
 
@@ -197,12 +201,16 @@ export function createMetaClient(deps: MetaClientDeps): MetaClient {
       throw new BudgetExceededError(spentUsd, deps.dailyBudgetUsd);
     }
 
+    // One model id per call, used in the request body and every log row, so
+    // ai_calls always records the model that actually ran.
+    const model = opts.model ?? deps.model;
+
     // Fail bad schemas locally instead of as a live HTTP 400.
     const jsonSchema = toStrictJsonSchema(opts.schema);
     assertStrictSubset(jsonSchema);
 
     const body: ResponseCreateParamsNonStreaming = {
-      model: deps.model,
+      model,
       instructions: opts.system,
       input: [{ type: 'message', role: 'user', content: opts.input.map(toContentPart) }],
       reasoning: { effort: opts.effort },
@@ -227,7 +235,7 @@ export function createMetaClient(deps: MetaClientDeps): MetaClient {
           await safeLog({
             userId: opts.userId ?? null,
             purpose: opts.purpose,
-            model: deps.model,
+            model,
             latencyMs,
             ok: false,
           });
@@ -237,7 +245,7 @@ export function createMetaClient(deps: MetaClientDeps): MetaClient {
         await safeLog({
           userId: opts.userId ?? null,
           purpose: opts.purpose,
-          model: deps.model,
+          model,
           latencyMs,
           ok: false,
         });
@@ -265,7 +273,7 @@ export function createMetaClient(deps: MetaClientDeps): MetaClient {
         await safeLog({
           userId: opts.userId ?? null,
           purpose: opts.purpose,
-          model: deps.model,
+          model,
           inputTokens,
           outputTokens,
           cachedTokens,
@@ -281,7 +289,7 @@ export function createMetaClient(deps: MetaClientDeps): MetaClient {
       await safeLog({
         userId: opts.userId ?? null,
         purpose: opts.purpose,
-        model: deps.model,
+        model,
         inputTokens,
         outputTokens,
         cachedTokens,

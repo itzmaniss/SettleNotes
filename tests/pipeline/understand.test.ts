@@ -56,6 +56,24 @@ describe('UNDERSTAND_SYSTEM_PROMPT', () => {
     expect(UNDERSTAND_SYSTEM_PROMPT.toLowerCase()).toContain('verbatim');
   });
 
+  test('a day-only change to an existing task keeps its current time of day', () => {
+    expect(UNDERSTAND_SYSTEM_PROMPT).toContain('KEEP THE TIME');
+    expect(UNDERSTAND_SYSTEM_PROMPT).toContain('time of day');
+    expect(UNDERSTAND_SYSTEM_PROMPT).toContain('Change the date, never the clock time.');
+    // The 23:59 default is scoped: it never applies to a day-only change.
+    expect(UNDERSTAND_SYSTEM_PROMPT).toContain('The 23:59 end of day default applies ONLY when no time of day is known');
+  });
+
+  test('explains itself when the student asks what it did or why', () => {
+    expect(UNDERSTAND_SYSTEM_PROMPT).toContain('QUESTIONS ABOUT WHAT YOU DID');
+    expect(UNDERSTAND_SYSTEM_PROMPT).toContain('answer_to_student');
+    expect(UNDERSTAND_SYSTEM_PROMPT).toContain('"why did you change the time?"');
+    expect(UNDERSTAND_SYSTEM_PROMPT).toContain('Make no changes (actions is empty or a single none action) and set needs_clarification to null.');
+    expect(UNDERSTAND_SYSTEM_PROMPT).toContain('plain text only');
+    expect(UNDERSTAND_SYSTEM_PROMPT).toContain('never any instruction to run, install, buy or open anything');
+    expect(UNDERSTAND_SYSTEM_PROMPT).toContain('For everything else, answer_to_student is null.');
+  });
+
   test('tells the model how to handle images and PDFs and group chats', () => {
     expect(UNDERSTAND_SYSTEM_PROMPT).toContain('chat_screenshot');
     expect(UNDERSTAND_SYSTEM_PROMPT).toContain('extracted_text');
@@ -77,6 +95,22 @@ describe('buildUnderstandUserText', () => {
     expect(text).toMatch(/CALENDAR[\s\S]*14 days/);
     expect(text).toContain('T1: CS2030 Lab 4 | course: CS2030 | kind: assignment | due 2026-10-30T23:59');
     expect(text).toContain('T2: MA2001 Quiz | course: none | kind: test | no due date');
+  });
+
+  test('open task due lines show the Singapore local time of day, and the header says a day-only change keeps it', () => {
+    // 15:00Z is 23:00 in Singapore; the model must see that clock time.
+    const text = buildUnderstandUserText({
+      now: FRI,
+      openTasks: [
+        { ref: 'T1', title: 'MA2001 tutorial', course: 'MA2001', kind: 'other', due_local: '2026-11-03T23:00' },
+      ],
+      text: 'tues',
+      hasImage: false,
+      hasPdf: false,
+    });
+    expect(text).toContain('T1: MA2001 tutorial | course: MA2001 | kind: other | due 2026-11-03T23:00 Singapore time');
+    expect(text).toContain('Each due line shows the current date AND time of day in Singapore time');
+    expect(text).toContain('an update that changes only the day keeps that time of day');
   });
 
   test('wraps student content in delimiters and neutralises an injected closing delimiter', () => {
@@ -186,6 +220,7 @@ describe('UnderstandOutputSchema', () => {
     extracted_text: 'prof say extend lab 4 to nxt fri liao',
     actions: [validAction],
     needs_clarification: null,
+    answer_to_student: null,
   };
 
   test('passes the Meta strict subset check', () => {
@@ -232,6 +267,7 @@ describe('understand', () => {
       },
     ],
     needs_clarification: null,
+    answer_to_student: null,
   };
   const openTasks = [
     { id: 'task-1', title: 'CS2030 Lab 4', course: 'CS2030', kind: 'assignment', due_at: '2026-10-30T15:59:00.000Z' },
@@ -387,9 +423,13 @@ const FixtureSchema = z.strictObject({
     }),
   ),
   text: z.string(),
+  recentExchange: z
+    .array(z.object({ role: z.enum(['student', 'settle']), text: z.string() }))
+    .optional(),
   expected: z.strictObject({
     actions: z.array(ExpectedActionSchema),
     needs_clarification: z.boolean(),
+    expect_answer: z.boolean().optional(),
   }),
 });
 
@@ -399,7 +439,12 @@ type Fixture = {
   now: string;
   openTasks: Array<{ id: string; title: string; course: string | null; kind: string; due_at: string | null }>;
   text: string;
-  expected: { actions: Array<Record<string, unknown>>; needs_clarification: boolean };
+  recentExchange?: Array<{ role: 'student' | 'settle'; text: string }>;
+  expected: {
+    actions: Array<Record<string, unknown>>;
+    needs_clarification: boolean;
+    expect_answer?: boolean;
+  };
 };
 
 function loadFixtures(): Fixture[] {
@@ -460,6 +505,7 @@ describe('fixtures', () => {
           (partial) => ({ ...ACTION_DEFAULTS, ...partial }) as UnderstandAction,
         ),
         needs_clarification: fixture.expected.needs_clarification ? 'Which task do you mean?' : null,
+        answer_to_student: null,
       };
       const fake = makeFake(output);
       const result = await understand({ generateObject: fake.generateObject }, {
@@ -471,5 +517,165 @@ describe('fixtures', () => {
       const expectedRefs = Object.fromEntries(fixture.openTasks.map((t, i) => [`T${i + 1}`, t.id]));
       expect(result.refToTaskId).toEqual(expectedRefs);
     }
+  });
+});
+
+describe('answer_to_student guard rails', () => {
+  const baseOutput: UnderstandOutput = {
+    input_kind: 'plain_message',
+    extracted_text: 'why did you change the time?',
+    actions: [],
+    needs_clarification: null,
+    answer_to_student: 'I only moved the date; the 11:00pm time stayed the same.',
+  };
+
+  test('schema rejects a missing answer_to_student key', () => {
+    const without = { ...baseOutput };
+    delete (without as Partial<UnderstandOutput>).answer_to_student;
+    expect(UnderstandOutputSchema.safeParse(without).success).toBe(false);
+  });
+
+  test('passes through when there are no actions', async () => {
+    const fake = makeFake(baseOutput);
+    const result = await understand({ generateObject: fake.generateObject }, {
+      now: FRI,
+      openTasks: [],
+      text: 'why did you change the time?',
+    });
+    expect(result.output.answer_to_student).toBe('I only moved the date; the 11:00pm time stayed the same.');
+  });
+
+  test('an answer that arrives with real actions is dropped (actions win)', async () => {
+    const withAction: UnderstandOutput = {
+      ...baseOutput,
+      actions: [
+        {
+          type: 'update',
+          task_ref: 'T1',
+          title: null,
+          course: null,
+          kind: null,
+          due_local: '2026-11-10T23:00',
+          effort: null,
+          evidence: 'tues',
+          confidence: 0.9,
+        },
+      ],
+    };
+    const fake = makeFake(withAction);
+    const result = await understand({ generateObject: fake.generateObject }, {
+      now: FRI,
+      openTasks: [{ id: 'task-1', title: 'MA2001 tutorial', course: 'MA2001', kind: 'other', due_at: '2026-11-03T15:00:00.000Z' }],
+      text: 'tues',
+    });
+    expect(result.output.answer_to_student).toBeNull();
+    expect(result.output.actions).toHaveLength(1);
+  });
+
+  test('an answer beside a single none action is kept', async () => {
+    const withNone: UnderstandOutput = {
+      ...baseOutput,
+      actions: [
+        {
+          type: 'none',
+          task_ref: null,
+          title: null,
+          course: null,
+          kind: null,
+          due_local: null,
+          effort: null,
+          evidence: 'a question, not a task',
+          confidence: 0.9,
+        },
+      ],
+    };
+    const fake = makeFake(withNone);
+    const result = await understand({ generateObject: fake.generateObject }, { now: FRI, openTasks: [], text: 'why?' });
+    expect(result.output.answer_to_student).toBe(baseOutput.answer_to_student);
+  });
+
+  test('empty, whitespace and null answers all become null', async () => {
+    for (const answer of [null, '', '   ', '\n\t ']) {
+      const fake = makeFake({ ...baseOutput, answer_to_student: answer });
+      const result = await understand({ generateObject: fake.generateObject }, { now: FRI, openTasks: [], text: 'hi' });
+      expect(result.output.answer_to_student).toBeNull();
+    }
+  });
+
+  test('newlines collapse to spaces and the answer is capped at 400 characters', async () => {
+    const multiline = 'First line.\n\nSecond line.';
+    const fake = makeFake({ ...baseOutput, answer_to_student: multiline });
+    const result = await understand({ generateObject: fake.generateObject }, { now: FRI, openTasks: [], text: 'hi' });
+    expect(result.output.answer_to_student).toBe('First line. Second line.');
+
+    const long = 'a'.repeat(450);
+    const fakeLong = makeFake({ ...baseOutput, answer_to_student: long });
+    const capped = await understand({ generateObject: fakeLong.generateObject }, { now: FRI, openTasks: [], text: 'hi' });
+    expect(capped.output.answer_to_student).toHaveLength(400);
+  });
+});
+
+describe('text only model override', () => {
+  const canned: UnderstandOutput = {
+    input_kind: 'plain_message',
+    extracted_text: 'hi',
+    actions: [],
+    needs_clarification: null,
+    answer_to_student: null,
+  };
+  const openTasks = [
+    { id: 'task-1', title: 'MA2001 tutorial', course: 'MA2001', kind: 'other', due_at: '2026-11-03T15:00:00.000Z' },
+  ];
+
+  test('unset options keep the default behaviour byte for byte: no model key, effort low', async () => {
+    const fake = makeFake(canned);
+    await understand({ generateObject: fake.generateObject }, { now: FRI, openTasks, text: 'hi' });
+    const call = fake.calls[0];
+    expect(call.effort).toBe('low');
+    expect('model' in call ? call.model : undefined).toBeUndefined();
+  });
+
+  test('set options reach the client call for text only messages', async () => {
+    const fake = makeFake(canned);
+    await understand({ generateObject: fake.generateObject }, {
+      now: FRI,
+      openTasks,
+      text: 'hi',
+      textModel: 'muse-spark-1.2',
+      textEffort: 'minimal',
+    });
+    const call = fake.calls[0];
+    expect(call.model).toBe('muse-spark-1.2');
+    expect(call.effort).toBe('minimal');
+  });
+
+  test('an image call never uses the override: default model path, effort medium', async () => {
+    const fake = makeFake(canned);
+    await understand({ generateObject: fake.generateObject }, {
+      now: FRI,
+      openTasks,
+      text: null,
+      image: { base64: 'aGVsbG8=', mimeType: 'image/jpeg' },
+      textModel: 'muse-spark-1.2',
+      textEffort: 'minimal',
+    });
+    const call = fake.calls[0];
+    expect('model' in call ? call.model : undefined).toBeUndefined();
+    expect(call.effort).toBe('medium');
+  });
+
+  test('a pdf call never uses the override either', async () => {
+    const fake = makeFake(canned);
+    await understand({ generateObject: fake.generateObject }, {
+      now: FRI,
+      openTasks: [],
+      text: 'see attached',
+      pdf: { base64: 'JVBERi0=', filename: 'brief.pdf' },
+      textModel: 'muse-spark-1.2',
+      textEffort: 'minimal',
+    });
+    const call = fake.calls[0];
+    expect('model' in call ? call.model : undefined).toBeUndefined();
+    expect(call.effort).toBe('medium');
   });
 });

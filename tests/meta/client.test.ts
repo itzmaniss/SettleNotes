@@ -8,6 +8,7 @@ import {
   MetaTimeoutError,
   createMetaClient,
 } from '../../lib/meta/client';
+import { sparkCostUsd } from '../../lib/meta/pricing';
 import type { AiCallLog, MetaClientDeps, ResponsesCreateFn } from '../../lib/meta/client';
 
 const TestSchema = z.object({ name: z.string(), score: z.number().nullable() });
@@ -350,5 +351,63 @@ describe('createOpenAIClient', () => {
     const client = createOpenAIClient('test-key', 'https://meta.example/v1');
     expect(client.baseURL).toBe('https://meta.example/v1');
     expect(typeof client.responses.create).toBe('function');
+  });
+});
+
+describe('per call model override', () => {
+  function overrideArgs(model?: string) {
+    return {
+      purpose: 'understand' as const,
+      userId: 'user-1',
+      schema: TestSchema,
+      schemaName: 'TestOutput',
+      system: 'You are a stable system prompt.',
+      input: [{ type: 'text' as const, text: 'hello' }],
+      effort: 'minimal' as const,
+      ...(model != null ? { model } : {}),
+    };
+  }
+
+  test('an explicit model is used in the request body and the success log', async () => {
+    const harness = makeHarness({ steps: [ok(ValidJson)] });
+    const client = createMetaClient(harness.deps);
+    await client.generateObject(overrideArgs('muse-spark-1.2'));
+
+    expect(harness.calls).toHaveLength(1);
+    expect(harness.calls[0].body.model).toBe('muse-spark-1.2');
+    expect(harness.logs).toHaveLength(1);
+    expect(harness.logs[0].model).toBe('muse-spark-1.2');
+    expect(harness.logs[0].ok).toBe(true);
+  });
+
+  test('without an override the client default model is used, as before', async () => {
+    const harness = makeHarness({ steps: [ok(ValidJson)] });
+    const client = createMetaClient(harness.deps);
+    await client.generateObject(overrideArgs());
+
+    expect(harness.calls[0].body.model).toBe('muse-spark-1.3');
+    expect(harness.logs[0].model).toBe('muse-spark-1.3');
+  });
+
+  test('an unknown model id still prices at the Spark rates and is logged as sent', async () => {
+    const harness = makeHarness({ steps: [ok(ValidJson)] });
+    const client = createMetaClient(harness.deps);
+    const { usage } = await client.generateObject(overrideArgs('some-future-model'));
+
+    // usage: 1000 input (200 cached), 500 output, priced by the shared table.
+    expect(usage.costUsd).toBe(sparkCostUsd({ inputTokens: 1000, cachedTokens: 200, outputTokens: 500 }));
+    expect(harness.logs[0].model).toBe('some-future-model');
+    expect(harness.logs[0].costUsd).toBe(usage.costUsd);
+  });
+
+  test('a failed attempt also logs the model actually used', async () => {
+    // 400 is not retryable, so exactly one attempt and one log row.
+    const harness = makeHarness({ steps: [fail(new HttpLikeError(400))] });
+    const client = createMetaClient(harness.deps);
+    await client.generateObject(overrideArgs('muse-spark-1.2')).catch(() => {});
+
+    expect(harness.logs).toHaveLength(1);
+    expect(harness.logs[0].model).toBe('muse-spark-1.2');
+    expect(harness.logs[0].ok).toBe(false);
   });
 });

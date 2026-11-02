@@ -13,8 +13,10 @@ import type { PendingActionInput, PendingActionRow } from "@/lib/clarify/types";
 import { getMetaClient } from "@/lib/meta/index";
 import type { MetaClient } from "@/lib/meta/client";
 import { BudgetExceededError } from "@/lib/meta/client";
+import type { ReasoningEffort } from "@/lib/meta/client";
+import { env } from "@/lib/env";
 import type { ConversationTurn } from "@/lib/pipeline/conversation";
-import { dueLocalToUtc } from "@/lib/pipeline/dates";
+import { dueLocalToUtc, utcToSgtLocal } from "@/lib/pipeline/dates";
 import { executeOps, type ExecuteResult } from "@/lib/pipeline/execute";
 import {
   planReconcile,
@@ -44,6 +46,11 @@ export type IngestDeps = {
   // it; a failure is caught per action and falls back to the text-only line.
   insertPendingAction: (i: PendingActionInput) => Promise<PendingActionRow>;
   now: () => Date;
+  // Optional faster model and effort for text only understand calls. Null
+  // means "use the default model / effort low", exactly as before. Image and
+  // pdf calls ignore both and stay on the default model at effort medium.
+  textModel?: string | null;
+  textEffort?: ReasoningEffort | null;
   // Starter orchestration deps (defaults built lazily in createIngestDeps).
   starters?: StartersDeps;
   // Legacy hook from before the built-in math diagnosis existed; still fired
@@ -82,6 +89,10 @@ export type IngestOutcome =
       kind: "tasks";
       result: ExecuteResult;
       clarification: string | null;
+      // Plain answer to a question about what Settle did; null whenever any
+      // real action ran (actions win), so it rides along but is only shown
+      // for the nothing outcome. Optional so older callers stay valid.
+      answer?: string | null;
       inputKind: UnderstandOutput["input_kind"];
       pdfTruncated: boolean;
       starter: StarterReplyInfo | null;
@@ -90,7 +101,7 @@ export type IngestOutcome =
       // fell back to the text-only line.
       pendingPrompts: PendingPrompt[];
     }
-  | { kind: "nothing"; clarification: string | null }
+  | { kind: "nothing"; clarification: string | null; answer?: string | null }
   | { kind: "math"; caption: string; annotated: Buffer | null; practiceText: string | null; extra: string | null }
   // Math photo refused by the usage gate: no task, no diagnosis, the whole
   // reply is the quota text.
@@ -118,6 +129,15 @@ export function createIngestDeps(overrides: Partial<IngestDeps> = {}): IngestDep
     finishUpload: realFinishUpload,
     insertPendingAction: (i) => realInsertPendingAction(i),
     now: () => new Date(),
+    // Read at call time through the lazy env proxy, never at import time.
+    // Blank env values are already normalised to undefined, which behaves
+    // like null here: default model, default effort.
+    get textModel() {
+      return env.META_TEXT_MODEL ?? null;
+    },
+    get textEffort() {
+      return env.META_TEXT_EFFORT ?? null;
+    },
     // Built on first access: the real deps only resolve the Meta and Supabase
     // clients inside their functions, so nothing is read at import time.
     get starters() {
@@ -129,10 +149,34 @@ export function createIngestDeps(overrides: Partial<IngestDeps> = {}): IngestDep
 
 // The model only ever names tasks by short ref; the id used for any write must
 // come from our own refToTaskId map, never from anything the model emitted.
+const DATE_ONLY_DUE = /^\d{4}-\d{2}-\d{2}$/;
+
 function toReconcileAction(
   action: UnderstandAction,
   refToTaskId: Record<string, string>,
+  openTasksById: Map<string, TaskRow>,
 ): ReconcileAction {
+  let dueAt: string | null = null;
+  if (action.due_local != null) {
+    dueAt = dueLocalToUtc(action.due_local);
+    // A day-only change to an existing task keeps its time of day: the
+    // student said "tues", not "tues at midnight", so the old local clock
+    // time is merged back in. Creates and tasks without a due date keep the
+    // 23:59 end of day default.
+    if (
+      action.type === "update" &&
+      DATE_ONLY_DUE.test(action.due_local.trim()) &&
+      action.task_ref != null
+    ) {
+      const taskId = refToTaskId[action.task_ref];
+      const current = taskId != null ? openTasksById.get(taskId) : undefined;
+      const oldLocal = current?.due_at != null ? utcToSgtLocal(current.due_at) : "";
+      if (oldLocal !== "") {
+        const merged = dueLocalToUtc(`${action.due_local.trim()}${oldLocal.slice(10)}`);
+        if (merged != null) dueAt = merged;
+      }
+    }
+  }
   return {
     type: action.type,
     taskId: action.task_ref == null ? null : (refToTaskId[action.task_ref] ?? null),
@@ -140,7 +184,7 @@ function toReconcileAction(
     course: action.course,
     kind: action.kind,
     // An unparseable due_local becomes null (no deadline) instead of crashing.
-    dueAt: action.due_local == null ? null : dueLocalToUtc(action.due_local),
+    dueAt,
     effort: action.effort,
     evidence: action.evidence,
     confidence: action.confidence,
@@ -150,6 +194,7 @@ function toReconcileAction(
 export async function ingestContent(deps: IngestDeps, input: IngestInput): Promise<IngestOutcome> {
   const now = deps.now();
   const openTasks: TaskRow[] = await deps.listOpenTasks(input.user.id);
+  const openTasksById = new Map(openTasks.map((task) => [task.id, task]));
 
   const { output, refToTaskId } = await understand(
     { generateObject: deps.generateObject },
@@ -163,6 +208,10 @@ export async function ingestContent(deps: IngestDeps, input: IngestInput): Promi
         ? { base64: input.pdf.base64, filename: input.pdf.filename }
         : undefined,
       recentExchange: input.recentExchange,
+      // Text only calls may run on the faster configured text model; image
+      // and pdf calls ignore both options inside understand().
+      textModel: deps.textModel ?? undefined,
+      textEffort: deps.textEffort ?? undefined,
     },
   );
 
@@ -200,7 +249,7 @@ export async function ingestContent(deps: IngestDeps, input: IngestInput): Promi
     return { kind: "math", ...math.outcome };
   }
 
-  const actions = output.actions.map((action) => toReconcileAction(action, refToTaskId));
+  const actions = output.actions.map((action) => toReconcileAction(action, refToTaskId, openTasksById));
   const ops = planReconcile(actions, openTasks as OpenTaskLite[], now);
   const result = await deps.executeOps(ops, {
     userId: input.user.id,
@@ -241,12 +290,13 @@ export async function ingestContent(deps: IngestDeps, input: IngestInput): Promi
   const hasWrites =
     created.length > 0 || result.updated.length > 0 || result.completed.length > 0;
   if (!hasWrites && clarifyFallbacks.length === 0 && pendingPrompts.length === 0) {
-    return { kind: "nothing", clarification: output.needs_clarification };
+    return { kind: "nothing", clarification: output.needs_clarification, answer: output.answer_to_student };
   }
   return {
     kind: "tasks",
     result: { ...result, created, clarify: clarifyFallbacks },
     clarification: output.needs_clarification,
+    answer: output.answer_to_student,
     inputKind: output.input_kind,
     pdfTruncated: input.pdf?.tooManyPages ?? false,
     starter,

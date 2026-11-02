@@ -97,6 +97,24 @@ describe("parseEnv", () => {
     expect(parseEnv({ ...requiredOnly, STRIPE_SECRET_KEY: "   " }).STRIPE_SECRET_KEY).toBeUndefined();
   });
 
+  test("META_TEXT_MODEL and META_TEXT_EFFORT are optional and blank counts as missing", () => {
+    const unset = parseEnv(requiredOnly);
+    expect(unset.META_TEXT_MODEL).toBeUndefined();
+    expect(unset.META_TEXT_EFFORT).toBeUndefined();
+    expect(parseEnv({ ...requiredOnly, META_TEXT_MODEL: "", META_TEXT_EFFORT: "  " }).META_TEXT_MODEL).toBeUndefined();
+    expect(parseEnv({ ...requiredOnly, META_TEXT_MODEL: "" }).META_TEXT_EFFORT).toBeUndefined();
+
+    const set = parseEnv({ ...requiredOnly, META_TEXT_MODEL: "muse-spark-1.2", META_TEXT_EFFORT: "minimal" });
+    expect(set.META_TEXT_MODEL).toBe("muse-spark-1.2");
+    expect(set.META_TEXT_EFFORT).toBe("minimal");
+    expect(parseEnv({ ...requiredOnly, META_TEXT_EFFORT: "medium" }).META_TEXT_EFFORT).toBe("medium");
+  });
+
+  test("META_TEXT_EFFORT rejects anything outside minimal, low and medium", () => {
+    expect(() => parseEnv({ ...requiredOnly, META_TEXT_EFFORT: "high" })).toThrow(/META_TEXT_EFFORT/);
+    expect(() => parseEnv({ ...requiredOnly, META_TEXT_EFFORT: "none" })).toThrow(/META_TEXT_EFFORT/);
+  });
+
   test("parses ALLOWED_TELEGRAM_IDS ignoring blanks", () => {
     const env = parseEnv({ ...requiredOnly, ALLOWED_TELEGRAM_IDS: "101, , 202, , " });
     expect(env.ALLOWED_TELEGRAM_IDS).toEqual([101, 202]);

@@ -1,0 +1,29 @@
+{
+  "id": "followup-tuesday-keeps-time",
+  "description": "Student answers a which-date question with just 'tues': the update keeps the task's existing 11:00pm time of day instead of sliding to 23:59",
+  "now": "2026-11-02T11:23:00+08:00",
+  "openTasks": [
+    {
+      "id": "task-1",
+      "title": "MA2001 tutorial",
+      "course": "MA2001",
+      "kind": "other",
+      "due_at": "2026-11-03T15:00:00.000Z"
+    }
+  ],
+  "text": "tues",
+  "recentExchange": [
+    { "role": "student", "text": "urhh prof changed 2001 tut to nex week already liao" },
+    { "role": "settle", "text": "Which date next week is the MA2001 tutorial due now?" }
+  ],
+  "expected": {
+    "actions": [
+      {
+        "type": "update",
+        "task_ref": "T1",
+        "due_local": "2026-11-10T23:00"
+      }
+    ],
+    "needs_clarification": false
+  }
+}
