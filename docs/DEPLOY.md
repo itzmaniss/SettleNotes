@@ -102,7 +102,7 @@ cd /opt/settle
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
-Caddy fetches a Let's Encrypt certificate for the domain on first request and renews it from then on. The app container is not published to the host; only Caddy's 80 and 443 are. The compose services look like this (full file in `deploy/`):
+Caddy fetches a Let's Encrypt certificate for the domain on first request and renews it from then on. The app container is not published to the host; only Caddy's 80 and 443 are. The image carries the `content` folder with the legal pages (`content/legal/*.md`), so the Terms, Privacy and Refunds pages work without a repo checkout on the server. The compose services look like this (full file in `deploy/`):
 
 ```
 services:

@@ -33,19 +33,36 @@ describe("Dockerfile", () => {
     expect(runner.join("\n")).not.toContain("rm -rf");
   });
 
-  test("final stage copies only the standalone output, static assets and public", () => {
+  test("final stage copies the standalone output, static assets, public and content", () => {
     const runnerStart = lines.findIndex((line) => line.trim().startsWith("FROM node:22-alpine"));
     const runner = lines.slice(runnerStart);
     const copies = runner.filter((line) => line.trim().startsWith("COPY "));
 
-    expect(copies.length).toBe(3);
+    expect(copies.length).toBe(4);
     expect(copies.join("\n")).toContain("/app/.next/standalone ./");
     expect(copies.join("\n")).toContain("/app/.next/static ./.next/static");
     expect(copies.join("\n")).toContain("/app/public ./public");
+    expect(copies.join("\n")).toContain("/app/content ./content");
     // Nothing else from the builder (no source, no env files, no lockfile).
     for (const copy of copies) {
-      expect(copy).not.toMatch(/\.env|package\.json|bun\.lock|\/app\/(?!\.next\/(standalone|static)|public)/);
+      expect(copy).not.toMatch(
+        /\.env|package\.json|bun\.lock|\/app\/(?!\.next\/(standalone|static)|public|content)/,
+      );
     }
+  });
+
+  test("the content folder the image ships is in the repo, with all three documents", () => {
+    // The Dockerfile COPY is only honest if the files really exist in the
+    // build context; a rename would silently break the legal pages at
+    // runtime, so pin the names readLegalSource expects.
+    for (const name of ["terms", "privacy", "refund"]) {
+      const file = new URL(`../../content/legal/${name}.md`, import.meta.url);
+      const text = readFileSync(file, "utf8");
+      expect(text.startsWith("# Settle ")).toBe(true);
+    }
+    // The build context must not drop the folder either.
+    const dockerignore = readFileSync(new URL("../../.dockerignore", import.meta.url), "utf8");
+    expect(dockerignore).not.toMatch(/^\/?content\b/m);
   });
 
   test("final image runs no package manager and ships no source maps", () => {

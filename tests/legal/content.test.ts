@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import { readLegalSource, LEGAL_KEYS, LEGAL_VERSION, loadAllLegalSources, loadLegalDocument, type LegalEnv } from "../../lib/legal/content";
+import { readLegalSource, LEGAL_KEYS, loadAllLegalSources, loadLegalDocument, type LegalEnv } from "../../lib/legal/content";
 import { LEGAL_TOKEN_NAMES } from "../../lib/legal/tokens";
 import { findProblems } from "../../lib/legal/check";
+import { TERMS_VERSION } from "../../lib/legal/version";
 
 // Full, valid, obviously fake env. The sentinel values must never leak into
 // any check output; check.test.ts pins that.
@@ -78,7 +79,9 @@ describe("the real content files", () => {
   });
 
   test("the effective date version renders as the visible date", () => {
-    expect(LEGAL_VERSION).toBe("2026-11-01");
+    // The single version stamp lives in lib/legal/version.ts; the loader and
+    // the check script both read it from there.
+    expect(TERMS_VERSION).toBe("2026-11-01");
     const doc = loadLegalDocument("terms", { env: FULL_ENV });
     expect(
       doc.blocks.some(

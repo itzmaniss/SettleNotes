@@ -33,8 +33,14 @@ function flatText(spans: LegalSpan[]): string {
 describe("safeLegalHref", () => {
   test("allows relative, https and mailto targets", () => {
     expect(safeLegalHref("/privacy")).toEqual({ href: "/privacy", external: false });
+    expect(safeLegalHref("/terms#refunds")).toEqual({ href: "/terms#refunds", external: false });
+    expect(safeLegalHref("/%0d%0a")).toEqual({ href: "/%0d%0a", external: false });
     expect(safeLegalHref("https://settle.example.com/x")).toEqual({
       href: "https://settle.example.com/x",
+      external: true,
+    });
+    expect(safeLegalHref("https://good.com/a%20b")).toEqual({
+      href: "https://good.com/a%20b",
       external: true,
     });
     expect(safeLegalHref("mailto:legal-sentinel@example.com")).toEqual({
@@ -43,16 +49,41 @@ describe("safeLegalHref", () => {
     });
   });
 
-  test("refuses everything else", () => {
-    for (const target of [
-      "http://settle.example.com",
-      "javascript:alert(1)",
-      "data:text/html,<b>x</b>",
-      "//evil.test/path",
-      "ftp://files.test",
-      "settle.example.com",
-    ]) {
-      expect(safeLegalHref(target)).toBeNull();
+  test("refuses every hostile target: the input to result table", () => {
+    // Each refused target must come back as null; parseInline renders the
+    // label as plain words and drops the target string entirely.
+    const refused: Array<[string, string]> = [
+      ["backslash looks relative but browsers read it as a slash", "/\\evil.com"],
+      ["slash backslash, same escape", "/\\/evil.com"],
+      ["protocol relative", "//evil.com"],
+      ["space in a relative path", "/ evil"],
+      ["space in an https target", "https://good.com/a b"],
+      ["tab inside an https target", "https://good.com/a\tb"],
+      ["newline inside an https target", "https://good.com/a\nb"],
+      ["carriage return inside a mailto target", "mailto:legal-sentinel@example.com\rx"],
+      ["newline inside a mailto target", "mailto:legal-sentinel@example.com\nx"],
+      ["tab inside a relative path", "/\t evil"],
+      ["del character", "https://good.com/a\u007fb"],
+      ["control character inside a relative path", "/a\u0001b"],
+      ["uppercase scheme dodge", "JAVASCRIPT:alert(1)"],
+      ["plain javascript scheme", "javascript:alert(1)"],
+      ["data url", "data:text/html,<b>x</b>"],
+      ["plain http", "http://settle.example.com"],
+      ["bare host, no scheme", "settle.example.com"],
+      ["empty target", ""],
+    ];
+    for (const [why, target] of refused) {
+      expect(safeLegalHref(target), why).toBeNull();
+    }
+  });
+
+  test("percent encoded controls stay allowed and inert", () => {
+    // Encoded forms never decode inside the attribute value, so they are
+    // accepted verbatim and stay harmless.
+    for (const target of ["/%0d%0a", "/terms%0a", "https://good.com/%0d%0a/x"]) {
+      const safe = safeLegalHref(target);
+      expect(safe).not.toBeNull();
+      expect(safe?.href).toBe(target);
     }
   });
 });
@@ -137,6 +168,12 @@ describe("parseLegalMarkdown", () => {
       "data:text/html,<b>x</b>",
       "http://settle.example.com",
       "//evil.test/path",
+      // A backslash parses as a link candidate, so the refusal must happen in
+      // safeLegalHref: browsers read /\evil.test as //evil.test.
+      "/\\evil.com",
+      "/\\/evil.com",
+      // A space never parses as a target at all; the label survives as words.
+      "/ evil",
     ]) {
       const blocks = parseLegalMarkdown(`Click [here](${target}) today.`);
       expect(kinds(blocks)).toEqual(["p"]);
@@ -147,6 +184,14 @@ describe("parseLegalMarkdown", () => {
     const dropped = parseLegalMarkdown("Click [here](http://settle.example.com) today.");
     expect(linksIn(para(dropped, 0).spans)).toEqual([]);
     expect(para(dropped, 0).text).toBe("Click here today.");
+  });
+
+  test("a percent encoded control target stays a normal link", () => {
+    const blocks = parseLegalMarkdown("Read the [archive](/%0d%0a) copy.");
+    const link = para(blocks, 0).spans[1];
+    expect(link?.kind).toBe("link");
+    expect(link?.kind === "link" && link.href).toBe("/%0d%0a");
+    expect(link?.kind === "link" && link.external).toBe(false);
   });
 
   test("raw HTML is kept as plain text, never a span of its own kind", () => {

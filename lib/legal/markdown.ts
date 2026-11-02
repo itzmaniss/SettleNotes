@@ -31,14 +31,22 @@ export type LegalListBlock = { kind: "ul"; items: LegalListItem[] };
 
 export type LegalBlock = LegalParagraphBlock | LegalListBlock;
 
-// Only these targets ever become anchors. A relative path must not be
-// protocol relative, so //evil.test is refused. Anything else (javascript:,
-// data:, http:, ftp:, or whatever shows up next) renders as plain text and
-// the target string is dropped entirely, never echoed into an attribute.
+// Only these targets ever become anchors. Anything else (javascript:, data:,
+// http:, ftp:, or whatever shows up next) renders as plain text and the
+// target string is dropped entirely, never echoed into an attribute.
+// Refused on top of that: any target carrying a backslash, a space, a tab, a
+// newline or any other control character (below 0x20, or 0x7f DEL). A
+// backslash is fatal because browsers treat it as a slash, so /\evil.test
+// would escape the site exactly like the protocol relative //evil.test.
+const BAD_TARGET_RE = /[\u0000-\u001f\u007f\\ ]/;
+
 export function safeLegalHref(href: string): { href: string; external: boolean } | null {
+  if (BAD_TARGET_RE.test(href)) return null;
   if (href.startsWith("https://")) return { href, external: true };
   if (href.startsWith("mailto:")) return { href, external: false };
-  if (href.startsWith("/") && !href.startsWith("//")) return { href, external: false };
+  // A relative path starts with exactly one slash: the second character must
+  // be neither another slash (protocol relative) nor a backslash.
+  if (href.startsWith("/") && href[1] !== "/" && href[1] !== "\\") return { href, external: false };
   return null;
 }
 

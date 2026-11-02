@@ -73,7 +73,7 @@ describe("runSmokeChecks", () => {
     expect(requests.every((r) => r.url.startsWith(`${BASE}/`))).toBe(true);
   });
 
-  test("missing legal pages warn instead of failing", async () => {
+  test("missing legal pages fail instead of warning", async () => {
     const routes = healthyRoutes();
     for (const path of ["/terms", "/privacy", "/refund"]) {
       routes[`GET ${BASE}${path}`] = { status: 404, body: "not found" };
@@ -81,8 +81,57 @@ describe("runSmokeChecks", () => {
     const { fetcher } = fakeServer(routes);
     const results = await runSmokeChecks(fetcher, BASE);
     const legal = results.filter((r) => r.name.startsWith("legal page"));
-    expect(legal.map((r) => r.status)).toEqual(["warn", "warn", "warn"]);
+    expect(legal.map((r) => r.status)).toEqual(["fail", "fail", "fail"]);
+    expect(legal.every((r) => r.detail.includes("returned 404"))).toBe(true);
+  });
+
+  test("a legal page with an unresolved marker fails over https", async () => {
+    const routes = healthyRoutes();
+    routes[`GET ${BASE}/terms`] = {
+      status: 200,
+      body: "<html>terms [[COUNSEL: confirm the cap.]]</html>",
+    };
+    const { fetcher } = fakeServer(routes);
+    const results = await runSmokeChecks(fetcher, BASE);
+    const legal = results.filter((r) => r.name.startsWith("legal page"));
+    expect(legal.map((r) => r.status)).toEqual(["fail", "pass", "pass"]);
+    const terms = legal.find((r) => r.name === "legal page /terms");
+    expect(terms?.detail).toContain("unresolved [[...]] marker");
+  });
+
+  test("a legal page with an unresolved marker only warns over http", async () => {
+    const local = "http://localhost:3000";
+    const { fetcher } = fakeServer({
+      [`GET ${local}/`]: { status: 200, body: "<title>Settle</title>" },
+      [`GET ${local}/api/health`]: { status: 200, body: '{"ok":true}' },
+      [`GET ${local}/login`]: { status: 200, body: "ok" },
+      [`GET ${local}/dashboard`]: { status: 307, headers: { location: `${local}/auth/expired` } },
+      [`GET ${local}/billing`]: { status: 307, headers: { location: `${local}/auth/expired` } },
+      [`GET ${local}/tasks`]: { status: 307, headers: { location: `${local}/auth/expired` } },
+      [`GET ${local}/weak-spots`]: { status: 307, headers: { location: `${local}/auth/expired` } },
+      [`GET ${local}/api/telegram`]: { status: 405 },
+      [`POST ${local}/api/telegram`]: { status: 401 },
+      [`POST ${local}/api/stripe/webhook`]: { status: 503 },
+      [`GET ${local}/auth/telegram?id=1&hash=deadbeef`]: {
+        status: 303,
+        headers: { location: `${local}/login?error=failed` },
+      },
+      [`GET ${local}/terms`]: { status: 200, body: "<html>[[MISSING: LEGAL_OPERATOR_NAME]]</html>" },
+      [`GET ${local}/privacy`]: { status: 200, body: "<html>privacy</html>" },
+      [`GET ${local}/refund`]: { status: 200, body: "<html>refund</html>" },
+    });
+    const results = await runSmokeChecks(fetcher, local);
+    const legal = results.filter((r) => r.name.startsWith("legal page"));
+    expect(legal.map((r) => r.status)).toEqual(["warn", "pass", "pass"]);
     expect(results.filter((r) => r.status === "fail")).toEqual([]);
+  });
+
+  test("clean legal bodies pass on both protocols", async () => {
+    const { fetcher } = fakeServer(healthyRoutes());
+    const results = await runSmokeChecks(fetcher, BASE);
+    const legal = results.filter((r) => r.name.startsWith("legal page"));
+    expect(legal.map((r) => r.status)).toEqual(["pass", "pass", "pass"]);
+    expect(legal.every((r) => r.detail.includes("no unresolved markers"))).toBe(true);
   });
 
   test("a protected path answering 200 without a session fails", async () => {
@@ -152,9 +201,9 @@ describe("runSmokeChecks", () => {
         status: 303,
         headers: { location: `${local}/login?error=failed` },
       },
-      [`GET ${local}/terms`]: { status: 404 },
-      [`GET ${local}/privacy`]: { status: 404 },
-      [`GET ${local}/refund`]: { status: 404 },
+      [`GET ${local}/terms`]: { status: 200, body: "<html>terms</html>" },
+      [`GET ${local}/privacy`]: { status: 200, body: "<html>privacy</html>" },
+      [`GET ${local}/refund`]: { status: 200, body: "<html>refund</html>" },
     });
     const results = await runSmokeChecks(fetcher, local);
     expect(results.find((r) => r.name === "no x-powered-by header")).toBeUndefined();

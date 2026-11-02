@@ -205,15 +205,29 @@ export async function runSmokeChecks(fetcher: SmokeFetcher, rawBase: string): Pr
   for (const path of LEGAL_PATHS) {
     await check(`legal page ${path}`, async () => {
       const res = await request(fetcher, base, path);
-      if (res.status === 200) {
-        return { name: `legal page ${path}`, status: "pass", detail: `GET ${path} returned 200` };
+      if (res.status !== 200) {
+        // The pages ship with the app, so a missing page is a broken
+        // deployment, not a reminder.
+        return {
+          name: `legal page ${path}`,
+          status: "fail",
+          detail: detailFor(res, `GET ${path} returned ${res.status}`),
+        };
       }
-      // Written separately from the product code, so a missing page is a
-      // reminder, not a broken deployment.
+      // A [[ in the body means a counsel marker or a missing variable reached
+      // the reader. Over https that fails the launch; locally (http) the env
+      // is often not filled yet, so it only warns.
+      if (res.body.includes("[[")) {
+        return {
+          name: `legal page ${path}`,
+          status: base.startsWith("https://") ? "fail" : "warn",
+          detail: `GET ${path} returned 200 but the body still carries an unresolved [[...]] marker or token`,
+        };
+      }
       return {
         name: `legal page ${path}`,
-        status: "warn",
-        detail: `GET ${path} returned ${res.status}; the page is written separately`,
+        status: "pass",
+        detail: `GET ${path} returned 200 with no unresolved markers`,
       };
     });
   }

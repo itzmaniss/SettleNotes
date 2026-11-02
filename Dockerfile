@@ -36,6 +36,10 @@ RUN addgroup --system --gid 1001 settle && adduser --system --uid 1001 settle
 COPY --from=builder --chown=1001:1001 /app/.next/standalone ./
 COPY --from=builder --chown=1001:1001 /app/.next/static ./.next/static
 COPY --from=builder --chown=1001:1001 /app/public ./public
+# The legal pages read content/legal/*.md from the working directory at
+# request time (readLegalSource joins cwd), so the folder ships next to the
+# standalone server. Wording changes thus ship without touching env.
+COPY --from=builder --chown=1001:1001 /app/content ./content
 
 # Ship no source maps.
 RUN find /app -name "*.map" -type f -delete

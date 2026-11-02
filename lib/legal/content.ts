@@ -10,14 +10,11 @@ import { getEnv } from "@/lib/env";
 import { findMarkers } from "./check";
 import { parseLegalMarkdown, type LegalBlock } from "./markdown";
 import { fillTokens, legalTokens, type LegalTokenEnv } from "./tokens";
+import { TERMS_VERSION } from "./version";
 
 export type LegalKey = "terms" | "privacy" | "refund";
 
 export const LEGAL_KEYS: LegalKey[] = ["terms", "privacy", "refund"];
-
-// The version the effective_date token is built from. Bump it when counsel
-// signs off on new wording; formatLegalDate turns it into the visible date.
-export const LEGAL_VERSION = "2026-11-01";
 
 // The slice of lib/env the loader needs. Field names match the parsed env
 // exactly, so getEnv() can be passed as is and tests can pass a hand made
@@ -64,7 +61,7 @@ export function loadLegalDocument(
   deps?: { source?: string; env?: LegalEnv },
 ): LegalDocument {
   const source = deps?.source ?? readLegalSource(key);
-  const tokens = legalTokens({ env: deps?.env ?? envFromGetEnv(), version: LEGAL_VERSION });
+  const tokens = legalTokens({ env: deps?.env ?? envFromGetEnv(), version: TERMS_VERSION });
   const filled = fillTokens(source, tokens);
   const blocks = parseLegalMarkdown(filled);
   const h1 = blocks.find((block) => block.kind === "h1");
