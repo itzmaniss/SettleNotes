@@ -166,4 +166,4 @@ Day 2 exit check (manager, live): `eval math` on real photos (target 4/5 correct
 
 **T28. Stripe Managed Payments behind a switch (done).** `STRIPE_MANAGED_PAYMENTS` (default false). On: web subscription checkouts ask Stripe to be seller of record and handle tax; PayNow is hidden. Needs Stripe's approval and the owner checklist in `docs/STRIPE-MANAGED-PAYMENTS.md`; legal drafts need counsel review first (questions listed there).
 
-**T26. Legal page shells and placeholder check (proposed, not started).** Pages at `/terms`, `/privacy`, `/refund` rendering one content file each, plus a check that fails the smoke test while bracketed blanks or confirm-this notes remain.
+**T26. Legal pages and launch gate (done).** Text in `content/legal/*.md` with display-time tokens; pages at `/terms`, `/privacy`, `/refund`; `scripts/check-legal.ts` and the smoke test fail while counsel markers or missing settings remain. Waiting on counsel and four server settings.
