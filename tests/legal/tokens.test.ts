@@ -10,10 +10,10 @@ import {
 } from "../../lib/legal/tokens";
 
 const FULL_ENV: LegalTokenEnv = {
-  LEGAL_OPERATOR_NAME: "Sentinel Operator",
+  LEGAL_BUSINESS_NAME: "Sentinel Business",
   LEGAL_SUPPORT_EMAIL: "legal-sentinel@example.com",
   LEGAL_SUPABASE_REGION: "ap-southeast-1",
-  LEGAL_VPS_PROVIDER: "SentinelHost",
+  LEGAL_BUSINESS_UEN: "SentinelUEN",
   STRIPE_MANAGED_PAYMENTS: false,
 };
 
@@ -58,23 +58,23 @@ describe("legalTokens", () => {
 
   test("trims the env values", () => {
     const tokens = legalTokens({
-      env: { ...FULL_ENV, LEGAL_OPERATOR_NAME: "  Padded Name  " },
+      env: { ...FULL_ENV, LEGAL_BUSINESS_NAME: "  Padded Name  " },
       version: "2026-11-01",
     });
-    expect(tokens.operator_name).toBe("Padded Name");
+    expect(tokens.business_name).toBe("Padded Name");
   });
 
   test("a missing or blank value shows the MISSING marker naming the variable", () => {
     const tokens = legalTokens({ env: {}, version: "2026-11-01" });
-    expect(tokens.operator_name).toBe("[[MISSING: LEGAL_OPERATOR_NAME]]");
+    expect(tokens.business_name).toBe("[[MISSING: LEGAL_BUSINESS_NAME]]");
+    expect(tokens.business_uen).toBe("[[MISSING: LEGAL_BUSINESS_UEN]]");
     expect(tokens.support_email).toBe("[[MISSING: LEGAL_SUPPORT_EMAIL]]");
     expect(tokens.supabase_region).toBe("[[MISSING: LEGAL_SUPABASE_REGION]]");
-    expect(tokens.vps_provider).toBe("[[MISSING: LEGAL_VPS_PROVIDER]]");
     const blank = legalTokens({
-      env: { LEGAL_OPERATOR_NAME: "   " },
+      env: { LEGAL_BUSINESS_NAME: "   " },
       version: "2026-11-01",
     });
-    expect(blank.operator_name).toBe("[[MISSING: LEGAL_OPERATOR_NAME]]");
+    expect(blank.business_name).toBe("[[MISSING: LEGAL_BUSINESS_NAME]]");
   });
 
   test("managed payments off sentences are byte exact", () => {

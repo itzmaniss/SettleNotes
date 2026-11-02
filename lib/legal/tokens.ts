@@ -6,10 +6,10 @@ import { PLANS, formatPrice } from "@/lib/billing/plans";
 
 export const LEGAL_TOKEN_NAMES = [
   "effective_date",
-  "operator_name",
+  "business_name",
+  "business_uen",
   "support_email",
   "supabase_region",
-  "vps_provider",
   "price_pro_monthly",
   "price_pro_yearly",
   "stars_monthly",
@@ -26,10 +26,10 @@ export type LegalTokens = Record<LegalTokenName, string>;
 // exactly, so getEnv() can be passed as is and tests can pass a hand made
 // object instead.
 export type LegalTokenEnv = {
-  LEGAL_OPERATOR_NAME?: string | undefined;
+  LEGAL_BUSINESS_NAME?: string | undefined;
   LEGAL_SUPPORT_EMAIL?: string | undefined;
   LEGAL_SUPABASE_REGION?: string | undefined;
-  LEGAL_VPS_PROVIDER?: string | undefined;
+  LEGAL_BUSINESS_UEN?: string | undefined;
   STRIPE_MANAGED_PAYMENTS?: boolean | undefined;
 };
 
@@ -72,10 +72,10 @@ export function legalTokens(input: { env: LegalTokenEnv; version: string }): Leg
   const stars = PLANS.pro.price.stars;
   return {
     effective_date: formatLegalDate(input.version),
-    operator_name: given(env.LEGAL_OPERATOR_NAME, "LEGAL_OPERATOR_NAME"),
+    business_name: given(env.LEGAL_BUSINESS_NAME, "LEGAL_BUSINESS_NAME"),
+    business_uen: given(env.LEGAL_BUSINESS_UEN, "LEGAL_BUSINESS_UEN"),
     support_email: given(env.LEGAL_SUPPORT_EMAIL, "LEGAL_SUPPORT_EMAIL"),
     supabase_region: given(env.LEGAL_SUPABASE_REGION, "LEGAL_SUPABASE_REGION"),
-    vps_provider: given(env.LEGAL_VPS_PROVIDER, "LEGAL_VPS_PROVIDER"),
     price_pro_monthly: formatPrice(PLANS.pro.price.monthly, PLANS.pro.price.currency),
     price_pro_yearly: formatPrice(PLANS.pro.price.yearly, PLANS.pro.price.currency),
     stars_monthly: stars == null ? "[[MISSING: PRO STARS PRICE]]" : String(stars.monthly),

@@ -2,16 +2,16 @@ import { describe, expect, test } from "bun:test";
 
 import { readLegalSource, LEGAL_KEYS, loadAllLegalSources, loadLegalDocument, type LegalEnv } from "../../lib/legal/content";
 import { LEGAL_TOKEN_NAMES } from "../../lib/legal/tokens";
-import { findProblems } from "../../lib/legal/check";
+import { runLegalCheck } from "../../lib/legal/check";
 import { TERMS_VERSION } from "../../lib/legal/version";
 
 // Full, valid, obviously fake env. The sentinel values must never leak into
 // any check output; check.test.ts pins that.
 const FULL_ENV: LegalEnv = {
-  LEGAL_OPERATOR_NAME: "Sentinel Operator",
+  LEGAL_BUSINESS_NAME: "Sentinel Business",
   LEGAL_SUPPORT_EMAIL: "legal-sentinel@example.com",
   LEGAL_SUPABASE_REGION: "ap-southeast-1",
-  LEGAL_VPS_PROVIDER: "SentinelHost",
+  LEGAL_BUSINESS_UEN: "SentinelUEN",
   STRIPE_MANAGED_PAYMENTS: false,
 };
 
@@ -59,7 +59,7 @@ describe("the real content files", () => {
     }
   });
 
-  test("each document loads with a valid env: h1 title, tokens filled, only counsel markers left", () => {
+  test("each document loads with a valid env: h1 title, tokens filled, no markers left", () => {
     for (const key of LEGAL_KEYS) {
       const doc = loadLegalDocument(key, { env: FULL_ENV });
       expect(doc.key).toBe(key);
@@ -71,11 +71,25 @@ describe("the real content files", () => {
       for (const block of doc.blocks) {
         expect(JSON.stringify(block)).not.toContain("{{");
       }
-      // What is left unresolved is exactly the counsel questions.
-      expect(doc.markers.every((marker) => marker.startsWith("[[COUNSEL: "))).toBe(true);
-      const problems = findProblems(loadLegalDocument(key, { env: FULL_ENV }).markers.join(""));
-      expect(problems.every((problem) => problem.kind === "marker")).toBe(true);
+      // The published text carries no counsel questions and no MISSING or
+      // UNKNOWN markers.
+      expect(doc.markers).toEqual([]);
     }
+  });
+
+  test("the real content runs through the check clean with a full valid env", () => {
+    const result = runLegalCheck({
+      sources,
+      env: FULL_ENV,
+      version: TERMS_VERSION,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.lines).toEqual([
+      "terms.md: ok",
+      "privacy.md: ok",
+      "refund.md: ok",
+      "3 files clean",
+    ]);
   });
 
   test("the effective date version renders as the visible date", () => {
@@ -100,7 +114,7 @@ describe("loadLegalDocument with an injected source", () => {
       "",
       "Effective date: {{effective_date}}",
       "",
-      "Run by {{operator_name}} at {{support_email}}. Pro costs {{price_pro_monthly}}.",
+      "Run by {{business_name}} (UEN {{business_uen}}) at {{support_email}}. Pro costs {{price_pro_monthly}}.",
       "",
       "- Star price: {{stars_monthly}}",
       "",
@@ -116,7 +130,7 @@ describe("loadLegalDocument with an injected source", () => {
         (block) =>
           block.kind === "p" &&
           block.text ===
-            "Run by Sentinel Operator at legal-sentinel@example.com. Pro costs S$7.99.",
+            "Run by Sentinel Business (UEN SentinelUEN) at legal-sentinel@example.com. Pro costs S$7.99.",
       ),
     ).toBe(true);
     expect(doc.markers).toEqual(["[[COUNSEL: first question.]]", "[[COUNSEL: second question.]]"]);
@@ -133,12 +147,12 @@ describe("loadLegalDocument with an injected source", () => {
 
   test("a missing env value surfaces as a MISSING marker in the blocks", () => {
     const doc = loadLegalDocument("privacy", {
-      source: "H\n\nRun by {{operator_name}}.",
+      source: "H\n\nRun by {{business_name}}.",
       env: {},
     });
     expect(
       doc.blocks.some(
-        (block) => block.kind === "p" && block.text.includes("[[MISSING: LEGAL_OPERATOR_NAME]]"),
+        (block) => block.kind === "p" && block.text.includes("[[MISSING: LEGAL_BUSINESS_NAME]]"),
       ),
     ).toBe(true);
   });

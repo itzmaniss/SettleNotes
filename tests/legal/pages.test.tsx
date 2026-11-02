@@ -11,10 +11,10 @@ import type { LegalDocument, LegalKey } from "@/lib/legal/content";
 // replaced with a wrapper around the REAL loader that injects a hand made
 // env, so the pages still render the actual content/legal documents.
 const PAGE_ENV = {
-  LEGAL_OPERATOR_NAME: "Sentinel Operator",
+  LEGAL_BUSINESS_NAME: "Sentinel Business",
   LEGAL_SUPPORT_EMAIL: "legal-sentinel@example.com",
   LEGAL_SUPABASE_REGION: "ap-southeast-1",
-  LEGAL_VPS_PROVIDER: "SentinelHost",
+  LEGAL_BUSINESS_UEN: "SentinelUEN",
   STRIPE_MANAGED_PAYMENTS: false,
 };
 
@@ -122,10 +122,11 @@ describe("legal pages render the real documents", () => {
     });
   }
 
-  test("terms and privacy carry the four counsel markers, refund is clean", () => {
-    expect(docs.terms.markers.length).toBe(2);
-    expect(docs.privacy.markers.length).toBe(2);
-    expect(docs.refund.markers.length).toBe(0);
+  test("the real documents carry no markers at all, terms, privacy and refund alike", () => {
+    const keys: LegalKey[] = ["terms", "privacy", "refund"];
+    for (const key of keys) {
+      expect(docs[key].markers, key).toEqual([]);
+    }
   });
 });
 

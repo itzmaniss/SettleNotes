@@ -4,10 +4,10 @@ import { findMarkers, findProblems, runLegalCheck, type LegalCheckDeps } from ".
 import type { LegalEnv } from "../../lib/legal/content";
 
 const FULL_ENV: LegalEnv = {
-  LEGAL_OPERATOR_NAME: "Sentinel Operator",
+  LEGAL_BUSINESS_NAME: "Sentinel Business",
   LEGAL_SUPPORT_EMAIL: "legal-sentinel@example.com",
   LEGAL_SUPABASE_REGION: "ap-southeast-1",
-  LEGAL_VPS_PROVIDER: "SentinelHost",
+  LEGAL_BUSINESS_UEN: "SentinelUEN",
   STRIPE_MANAGED_PAYMENTS: false,
 };
 
@@ -40,9 +40,9 @@ describe("findProblems", () => {
   });
 
   test("a MISSING or UNKNOWN marker from filling is a marker problem too", () => {
-    const problems = findProblems("Paid by [[MISSING: LEGAL_VPS_PROVIDER]] and [[UNKNOWN TOKEN: old_name]].");
+    const problems = findProblems("Paid by [[MISSING: LEGAL_BUSINESS_UEN]] and [[UNKNOWN TOKEN: old_name]].");
     expect(problems.map((problem) => problem.kind)).toEqual(["marker", "marker"]);
-    expect(problems[0]?.excerpt).toContain("LEGAL_VPS_PROVIDER");
+    expect(problems[0]?.excerpt).toContain("LEGAL_BUSINESS_UEN");
   });
 
   test("long excerpts are cut at 80 characters", () => {
@@ -69,7 +69,7 @@ const TERMS_SOURCE = [
   "",
   "Effective date: {{effective_date}}",
   "",
-  "Run by {{operator_name}}. Contact {{support_email}}.",
+  "Run by {{business_name}} (UEN {{business_uen}}). Contact {{support_email}}.",
   "",
   "Pro costs {{price_pro_monthly}} a month, {{price_pro_yearly}} a year, or {{stars_monthly}} Stars.",
   "",
@@ -85,7 +85,7 @@ const PRIVACY_SOURCE = [
   "",
   "Effective date: {{effective_date}}",
   "",
-  "Supabase region {{supabase_region}}, hosting by {{vps_provider}}.",
+  "Supabase region {{supabase_region}}, run by {{business_name}} (UEN {{business_uen}}).",
   "",
   "[[COUNSEL: confirm the overseas transfer safeguards before publishing.]]",
 ].join("\n");
@@ -113,9 +113,9 @@ describe("runLegalCheck", () => {
       "3 files checked, 2 problems",
     ]);
     const printed = result.lines.join("\n");
-    expect(printed).not.toContain("Sentinel Operator");
+    expect(printed).not.toContain("Sentinel Business");
+    expect(printed).not.toContain("SentinelUEN");
     expect(printed).not.toContain("legal-sentinel@example.com");
-    expect(printed).not.toContain("SentinelHost");
     expect(printed).not.toContain("ap-southeast-1");
   });
 
@@ -131,16 +131,16 @@ describe("runLegalCheck", () => {
 
   test("a missing env shows MISSING markers naming the variables", () => {
     const result = runLegalCheck({
-      sources: { terms: "# T\n\n{{operator_name}} {{support_email}} {{supabase_region}} {{vps_provider}}\n" },
+      sources: { terms: "# T\n\n{{business_name}} {{business_uen}} {{support_email}} {{supabase_region}}\n" },
       env: {},
       version: "2026-11-01",
     });
     expect(result.exitCode).toBe(1);
     const printed = result.lines.join("\n");
-    expect(printed).toContain("[[MISSING: LEGAL_OPERATOR_NAME]]");
+    expect(printed).toContain("[[MISSING: LEGAL_BUSINESS_NAME]]");
+    expect(printed).toContain("[[MISSING: LEGAL_BUSINESS_UEN]]");
     expect(printed).toContain("[[MISSING: LEGAL_SUPPORT_EMAIL]]");
     expect(printed).toContain("[[MISSING: LEGAL_SUPABASE_REGION]]");
-    expect(printed).toContain("[[MISSING: LEGAL_VPS_PROVIDER]]");
     expect(printed).not.toContain("Sentinel");
   });
 
@@ -166,13 +166,13 @@ describe("runLegalCheck", () => {
 
   test("the runner never needs process env: deps carry everything", () => {
     const deps: LegalCheckDeps = {
-      sources: { only: "# X\n\nRun by {{operator_name}}. [[COUNSEL: one.]]" },
+      sources: { only: "# X\n\nRun by {{business_name}}. [[COUNSEL: one.]]" },
       env: { STRIPE_MANAGED_PAYMENTS: true },
       version: "2026-11-01",
     };
     const result = runLegalCheck(deps);
     expect(result.exitCode).toBe(1);
-    expect(result.lines[0]).toContain("MISSING: LEGAL_OPERATOR_NAME");
+    expect(result.lines[0]).toContain("MISSING: LEGAL_BUSINESS_NAME");
     expect(result.lines[0]).toContain("[[COUNSEL: one.]]");
   });
 });

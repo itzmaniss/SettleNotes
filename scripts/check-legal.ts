@@ -11,9 +11,9 @@
 // variables from process.env; every other part of the env file can stay empty
 // here.
 //
-// PRIVACY: problem excerpts start at the problem itself, so the filled
-// operator name and support email are never printed; only variable names
-// appear, inside [[MISSING: VAR]] markers.
+// PRIVACY: problem excerpts start at the problem itself, so filled values
+// such as the support email are never printed; only variable names appear,
+// inside [[MISSING: VAR]] markers.
 
 import { runLegalCheck } from "../lib/legal/check";
 import { loadAllLegalSources } from "../lib/legal/content";
@@ -44,10 +44,10 @@ function booleanFlag(raw: string | undefined): boolean {
 // Builds the token env from a raw string map (normally process.env).
 export function legalEnvFromRaw(raw: LegalScriptRawEnv): LegalTokenEnv {
   return {
-    LEGAL_OPERATOR_NAME: optional(raw.LEGAL_OPERATOR_NAME),
+    LEGAL_BUSINESS_NAME: optional(raw.LEGAL_BUSINESS_NAME),
     LEGAL_SUPPORT_EMAIL: optional(raw.LEGAL_SUPPORT_EMAIL),
     LEGAL_SUPABASE_REGION: optional(raw.LEGAL_SUPABASE_REGION),
-    LEGAL_VPS_PROVIDER: optional(raw.LEGAL_VPS_PROVIDER),
+    LEGAL_BUSINESS_UEN: optional(raw.LEGAL_BUSINESS_UEN),
     STRIPE_MANAGED_PAYMENTS: booleanFlag(raw.STRIPE_MANAGED_PAYMENTS),
   };
 }

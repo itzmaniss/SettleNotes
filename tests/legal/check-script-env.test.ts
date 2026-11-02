@@ -18,28 +18,28 @@ describe("scripts/check-legal.ts env reading", () => {
 
   test("reads the five legal variables from an injected raw env", () => {
     const env = legalEnvFromRaw({
-      LEGAL_OPERATOR_NAME: "  Sentinel Operator  ",
+      LEGAL_BUSINESS_NAME: "  Sentinel Business  ",
       LEGAL_SUPPORT_EMAIL: "legal-sentinel@example.com",
       LEGAL_SUPABASE_REGION: "ap-southeast-1",
-      LEGAL_VPS_PROVIDER: "SentinelHost",
+      LEGAL_BUSINESS_UEN: "SentinelUEN",
       STRIPE_MANAGED_PAYMENTS: "true",
     });
-    expect(env.LEGAL_OPERATOR_NAME).toBe("Sentinel Operator");
+    expect(env.LEGAL_BUSINESS_NAME).toBe("Sentinel Business");
     expect(env.LEGAL_SUPPORT_EMAIL).toBe("legal-sentinel@example.com");
     expect(env.LEGAL_SUPABASE_REGION).toBe("ap-southeast-1");
-    expect(env.LEGAL_VPS_PROVIDER).toBe("SentinelHost");
+    expect(env.LEGAL_BUSINESS_UEN).toBe("SentinelUEN");
     expect(env.STRIPE_MANAGED_PAYMENTS).toBe(true);
   });
 
   test("blank and absent values count as absent, and the flag defaults to false", () => {
     const env = legalEnvFromRaw({
-      LEGAL_OPERATOR_NAME: "   ",
+      LEGAL_BUSINESS_NAME: "   ",
       STRIPE_MANAGED_PAYMENTS: "false",
     });
-    expect(env.LEGAL_OPERATOR_NAME).toBeUndefined();
+    expect(env.LEGAL_BUSINESS_NAME).toBeUndefined();
+    expect(env.LEGAL_BUSINESS_UEN).toBeUndefined();
     expect(env.LEGAL_SUPPORT_EMAIL).toBeUndefined();
     expect(env.LEGAL_SUPABASE_REGION).toBeUndefined();
-    expect(env.LEGAL_VPS_PROVIDER).toBeUndefined();
     expect(env.STRIPE_MANAGED_PAYMENTS).toBe(false);
 
     const empty = legalEnvFromRaw({});
@@ -59,26 +59,26 @@ describe("scripts/check-legal.ts env reading", () => {
   test("a plain env with only the legal variables runs the whole check to exit 1", () => {
     const result = runLegalCheck({
       sources: {
-        terms: "# T\n\nRun by {{operator_name}} at {{support_email}}.",
+        terms: "# T\n\nRun by {{business_name}} at {{support_email}}.",
       },
       env: legalEnvFromRaw({ STRIPE_MANAGED_PAYMENTS: "false" }),
       version: "2026-11-01",
     });
     expect(result.exitCode).toBe(1);
-    expect(result.lines.join("\n")).toContain("[[MISSING: LEGAL_OPERATOR_NAME]]");
+    expect(result.lines.join("\n")).toContain("[[MISSING: LEGAL_BUSINESS_NAME]]");
   });
 
   test("a filled plain env runs the whole check to exit 0", () => {
     const env = legalEnvFromRaw({
-      LEGAL_OPERATOR_NAME: "Sentinel Operator",
+      LEGAL_BUSINESS_NAME: "Sentinel Business",
       LEGAL_SUPPORT_EMAIL: "legal-sentinel@example.com",
       LEGAL_SUPABASE_REGION: "ap-southeast-1",
-      LEGAL_VPS_PROVIDER: "SentinelHost",
+      LEGAL_BUSINESS_UEN: "SentinelUEN",
       STRIPE_MANAGED_PAYMENTS: "true",
     });
     const result = runLegalCheck({
       sources: {
-        terms: "# T\n\nRun by {{operator_name}} at {{support_email}} in {{supabase_region}} on {{vps_provider}}.",
+        terms: "# T\n\nRun by {{business_name}} (UEN {{business_uen}}) at {{support_email}} in {{supabase_region}}.",
       },
       env,
       version: "2026-11-01",
@@ -95,10 +95,10 @@ describe("scripts/check-legal.ts env reading", () => {
   test("no problem excerpt ever echoes a filled env value", () => {
     const result = runLegalCheck({
       sources: {
-        terms: "# T\n\nRun by {{operator_name}} at {{support_email}}. TODO later.",
+        terms: "# T\n\nRun by {{business_name}} at {{support_email}}. TODO later.",
       },
       env: legalEnvFromRaw({
-        LEGAL_OPERATOR_NAME: "Secretive Operator",
+        LEGAL_BUSINESS_NAME: "Secretive Operator",
         LEGAL_SUPPORT_EMAIL: "legal-sentinel@example.com",
       }),
       version: "2026-11-01",

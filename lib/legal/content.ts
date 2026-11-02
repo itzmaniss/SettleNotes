@@ -45,10 +45,10 @@ export function loadAllLegalSources(): Record<LegalKey, string> {
 function envFromGetEnv(): LegalEnv {
   const env = getEnv();
   return {
-    LEGAL_OPERATOR_NAME: env.LEGAL_OPERATOR_NAME,
+    LEGAL_BUSINESS_NAME: env.LEGAL_BUSINESS_NAME,
+    LEGAL_BUSINESS_UEN: env.LEGAL_BUSINESS_UEN,
     LEGAL_SUPPORT_EMAIL: env.LEGAL_SUPPORT_EMAIL,
     LEGAL_SUPABASE_REGION: env.LEGAL_SUPABASE_REGION,
-    LEGAL_VPS_PROVIDER: env.LEGAL_VPS_PROVIDER,
     STRIPE_MANAGED_PAYMENTS: env.STRIPE_MANAGED_PAYMENTS,
   };
 }

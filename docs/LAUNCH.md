@@ -29,8 +29,12 @@ bun run scripts/stats.ts --days 7
 Settle only creates an account after a person accepts the Terms and the Privacy Policy, in the bot (the agree button) and on the web (the /accept page). These steps gate the launch:
 
 - [ ] **[User]** The legal pages ship with the app at `/terms`, `/privacy` and `/refund` and return 200. The consent buttons in the bot and on `/accept` link to them, so the gate must not go live while they error or show unresolved review notes.
-- [ ] **[User]** Set `LEGAL_OPERATOR_NAME`, `LEGAL_SUPPORT_EMAIL`, `LEGAL_SUPABASE_REGION` and `LEGAL_VPS_PROVIDER` in the server env file (`/opt/settle.env`). The owner provides the values; the operator name and the support email must never be committed to the repository.
-- [ ] **[Manager]** Run `bun --env-file=/opt/settle.env run scripts/check-legal.ts` and confirm it exits 0. Exit 0 means counsel has resolved every `[[COUNSEL: ...]]` line in `content/legal/*.md`; while any marker is left it exits 1 and prints the file and line.
+- [ ] **[User]** Set `LEGAL_BUSINESS_NAME`, `LEGAL_BUSINESS_UEN`, `LEGAL_SUPPORT_EMAIL` and `LEGAL_SUPABASE_REGION` in the server env file (`/opt/settle.env`). The business name and the UEN come from the ACRA registration; they are public business details, never the owner's personal details. The support email must never be committed to the repository.
+- [ ] **[Manager]** Run `bun --env-file=/opt/settle.env run scripts/check-legal.ts` and confirm it exits 0. Today there are no `[[COUNSEL: ...]]` lines left in the legal text, but any future `[[COUNSEL: ...]]` line or missing setting makes the check exit 1 and print the file and line.
+- [ ] **[User]** Register the business with ACRA via BizFile+ and note the UEN. Use the same legal name and UEN when activating the live Stripe account.
+- [ ] **[User]** Before launch, confirm the data protection terms with each provider that handles student data outside Singapore: Supabase (its data processing addendum), Stripe (the data processing terms inside its services agreement), and Meta (the Model API terms). Keep the date and link of each in your own notes, because the Privacy Notice says contract terms back the overseas transfers.
+- [ ] **[User]** The website runs on the owner's own server: if traffic reaches it through a proxy, tunnel or DNS service (for example Cloudflare), add that company to the "Who else handles your information" list in `content/legal/privacy.md` before launch (tell the manager; the manager edits the text).
+- [ ] **[Manager]** Refunds for payers under 18 who had no parent or guardian's permission are NEVER promised: handle each case by hand at the owner's discretion, and cancel the subscription in the same step.
 - [ ] **[User]** When counsel's approved text goes live, bump `TERMS_VERSION` in `lib/legal/version.ts` to that day, so everyone is asked to accept again.
 - [ ] **[User]** Singapore counsel has reviewed the legal pages and the consent wording in `lib/legal/consent-copy.ts`, especially whether wording about young readers, an age confirmation or liability language is needed. That call is counsel's, not this runbook's.
 - [ ] **[User]** Whenever the Terms or the Privacy Policy texts change, bump `TERMS_VERSION` in `lib/legal/version.ts` to the effective date, so everyone is asked to accept again.
@@ -229,6 +233,8 @@ The sweep is read only. It lists accounts with no activity for the threshold day
 ## 12. Refunds
 
 The money steps, per payment method. Tell the student by email in every case, and remember a refunded student keeps their tasks; only Pro features relock.
+
+- [ ] **[Manager]** Refunds for payers under 18 who had no parent or guardian's permission are NEVER promised: handle each case by hand at the owner's discretion, and cancel the subscription in the same step.
 
 ### Stripe card, monthly or yearly
 

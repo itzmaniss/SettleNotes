@@ -95,10 +95,10 @@ const envSchema = z.object({
   // Identity shown on the legal pages (content/legal/*.md tokens). Optional:
   // a blank or missing value becomes a visible [[MISSING: VAR]] marker in the
   // pages instead of failing startup; scripts/check-legal.ts reports it.
-  LEGAL_OPERATOR_NAME: z.string().optional(),
+  LEGAL_BUSINESS_NAME: z.string().optional(),
+  LEGAL_BUSINESS_UEN: z.string().optional(),
   LEGAL_SUPPORT_EMAIL: z.string().optional(),
   LEGAL_SUPABASE_REGION: z.string().optional(),
-  LEGAL_VPS_PROVIDER: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

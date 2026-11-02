@@ -2,13 +2,13 @@
 
 Effective date: {{effective_date}}
 
-These Terms are the rules for using Settle's Telegram bot and web dashboard (the "Service"). Settle is run from Singapore by {{operator_name}}, an individual ("Settle", "we", "us"). Settle is not run by a company. You can reach us at {{support_email}}. If you need a postal address for a legal notice, email us and we will give you one.
+These Terms are the rules for using Settle's Telegram bot and web dashboard (the "Service"). Settle is run from Singapore by {{business_name}} (UEN {{business_uen}}), a business registered with ACRA ("Settle", "we", "us"). You can reach us at {{support_email}}. If you need a postal address for a legal notice, email us and we will give you one.
 
 ## 1. Accepting these Terms
 
 Settle does not create your account, and does not take a payment, until you have accepted these Terms and read the [Privacy Notice](/privacy). In Telegram you accept by tapping "I agree and continue". On the website you accept on the "One quick step" page. If you do not agree, please do not use the Service.
 
-Settle is made for students aged 15 and older. If you are under 18, ask a parent or guardian to read these Terms and the Privacy Notice with you, especially before you subscribe to Pro. [[COUNSEL: confirm whether a parent or guardian must formally approve accounts or paid subscriptions for people under 18, and how that approval is recorded.]]
+Settle is made for students aged 15 and older. If you are 15 to 17, you can use the free plan on your own as long as you understand these Terms and the Privacy Notice. If you are not sure you do, ask a parent or guardian to read them with you first. Paying for Pro when you are under 18 has extra rules, set out in section 10.
 
 ## 2. What Settle does
 
@@ -50,12 +50,23 @@ You can stop using Settle at any time, and ask us to close your account by email
 
 As far as the law allows, Settle is provided "as available". We do not promise that it will be uninterrupted, free of errors or right for every purpose.
 
-As far as the law allows, we are not responsible for indirect or knock-on loss from using the Service. Our total responsibility to you for claims about the Service is limited to the larger of the amount you paid Settle in the 12 months before the claim and S$100, except for anything the law does not allow us to limit. [[COUNSEL: set or approve the liability cap and wording, and confirm it is fair for consumers and for readers aged 15 to 17.]]
+Nothing in these Terms limits our responsibility for death or personal injury caused by our negligence, for fraud, or for anything else the law does not allow us to limit.
+
+Apart from that, and as far as the law allows, we are not responsible for indirect or knock-on loss from using the Service. Our total responsibility to you for claims about the Service is limited to the larger of the amount you paid Settle in the 12 months before the claim and S$100. We think this is fair because the Service is low cost, has a free plan, and is a study aid that you are asked to double check.
 
 ## 9. Changes and governing law
 
 We may update these Terms. For important changes we will tell you in the Service or another reasonable way, and ask you to accept again. Singapore law governs these Terms, and the courts of Singapore can hear disputes, but this does not take away any right you have by law where you live.
 
-## 10. Contact
+## 10. If you are under 18
+
+In plain words:
+
+- You must be 15 or older to use Settle.
+- If you are under 18, a parent or guardian must read and agree to these Terms, and agree to the payment, before you subscribe to Pro. When you subscribe, you are telling us that they have.
+- The person whose card or payment account pays for Pro agrees to these Terms for that payment and is responsible for it. If a parent or guardian lets you use their card or payment account, that is their agreement too.
+- If you are under 18 and you sign up or pay without a parent or guardian reading and agreeing to these Terms, then you, and the parent or guardian whose payment method you used, are responsible for that payment, as far as the law allows.
+
+## 11. Contact
 
 Questions about these Terms or closing your account: {{support_email}}.
