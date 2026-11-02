@@ -63,7 +63,7 @@ export type ConsentCallbackContextLike = ConsentReplyContextLike & {
 export type ConsentPromptSender = (
   ctx: ConsentReplyContextLike,
   text: string,
-  keyboard: InlineKeyboard | undefined,
+  keyboard: InlineKeyboard,
 ) => Promise<unknown>;
 
 export type ConsentDeps = {
@@ -91,34 +91,38 @@ function buttonUrlsUsable(appBaseUrl: string): boolean {
   return url.protocol === "https:" && !LOOPBACK_HOSTS.has(hostname);
 }
 
-// Row 1: Terms and Privacy Policy as URL buttons. Row 2: the agree button.
-// Undefined keyboard means the caller must send the prompt without buttons and
-// the text already carries the plain addresses (buildConsentPrompt does that).
-export function consentKeyboard(appBaseUrl: string): InlineKeyboard | undefined {
-  if (!buttonUrlsUsable(appBaseUrl)) return undefined;
-  const base = appBaseUrl.replace(/\/+$/, "");
-  return new InlineKeyboard()
-    .url(CONSENT_BUTTONS.terms, `${base}${LEGAL_PATHS.terms}`)
-    .url(CONSENT_BUTTONS.privacy, `${base}${LEGAL_PATHS.privacy}`)
-    .row()
-    .text(CONSENT_BUTTONS.agree, CONSENT_CALLBACK_DATA);
+// Row 1: Terms and Privacy Policy as URL buttons, but only when Telegram
+// accepts those addresses (https and not loopback). The agree callback button
+// is ALWAYS on the keyboard, on its own row when the URL buttons are absent:
+// Telegram only rejects bad URL buttons, never callback buttons, so a student
+// on a local dev base can still accept and get an account.
+export function consentKeyboard(appBaseUrl: string): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  if (buttonUrlsUsable(appBaseUrl)) {
+    const base = appBaseUrl.replace(/\/+$/, "");
+    keyboard
+      .url(CONSENT_BUTTONS.terms, `${base}${LEGAL_PATHS.terms}`)
+      .url(CONSENT_BUTTONS.privacy, `${base}${LEGAL_PATHS.privacy}`)
+      .row();
+  }
+  return keyboard.text(CONSENT_BUTTONS.agree, CONSENT_CALLBACK_DATA);
 }
 
 // One message, assembled in a fixed order: the changed-terms note first, then
 // the dropped-message note, then the intro. Without usable button URLs the
-// two legal addresses become plain lines under the intro.
+// two legal addresses become plain lines under the intro; the agree button is
+// on the keyboard either way.
 export function buildConsentPrompt(
   status: Exclude<ConsentStatus, "ok">,
   blockedKind: "start" | "other",
   appBaseUrl: string,
-): { text: string; keyboard: InlineKeyboard | undefined } {
+): { text: string; keyboard: InlineKeyboard } {
   const lines: string[] = [];
   if (status === "stale") lines.push(CONSENT_AGAIN_NOTE);
   if (blockedKind === "other") lines.push(CONSENT_RESEND_NOTE);
   lines.push(CONSENT_INTRO);
-  const keyboard = consentKeyboard(appBaseUrl);
-  if (keyboard === undefined) lines.push(CONSENT_PLAIN_LINES(appBaseUrl));
-  return { text: lines.join("\n\n"), keyboard };
+  if (!buttonUrlsUsable(appBaseUrl)) lines.push(CONSENT_PLAIN_LINES(appBaseUrl));
+  return { text: lines.join("\n\n"), keyboard: consentKeyboard(appBaseUrl) };
 }
 
 // ---- middleware -------------------------------------------------------------
@@ -285,7 +289,6 @@ export function createConsentDeps(): ConsentDeps {
     get appBaseUrl() {
       return env.APP_BASE_URL;
     },
-    sendConsentPrompt: (ctx, text, keyboard) =>
-      ctx.reply(text, keyboard === undefined ? undefined : { reply_markup: keyboard }),
+    sendConsentPrompt: (ctx, text, keyboard) => ctx.reply(text, { reply_markup: keyboard }),
   };
 }

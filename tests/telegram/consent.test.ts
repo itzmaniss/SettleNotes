@@ -147,33 +147,50 @@ async function runGate(spy: CtxSpy, deps: ConsentDeps) {
   return { passed: called() > 0 };
 }
 
+type InlineButton = { text: string; url?: string; callback_data?: string };
+
+// Reads the button matrix out of a reply_markup value the way Telegram sees it.
+function inlineRows(markup: unknown): InlineButton[][] {
+  return (markup as { inline_keyboard?: InlineButton[][] } | undefined)?.inline_keyboard ?? [];
+}
+
+const AGREE_ROW: InlineButton[] = [
+  { text: "I agree and continue", callback_data: CONSENT_CALLBACK_DATA },
+];
+
 // ---- pure prompt builders ---------------------------------------------------
 
 describe("consentKeyboard", () => {
   test("https base: two URL buttons on row 1, the agree callback on row 2", () => {
-    const keyboard = consentKeyboard(BASE);
-    expect(keyboard).toBeDefined();
-    const rows = (keyboard as unknown as { inline_keyboard: Array<Array<{ text: string; url?: string; callback_data?: string }>> }).inline_keyboard;
+    const rows = inlineRows(consentKeyboard(BASE));
     expect(rows).toHaveLength(2);
     expect(rows[0]).toEqual([
       { text: "Terms", url: `${BASE}${LEGAL_PATHS.terms}` },
       { text: "Privacy Policy", url: `${BASE}${LEGAL_PATHS.privacy}` },
     ]);
-    expect(rows[1]).toEqual([{ text: "I agree and continue", callback_data: CONSENT_CALLBACK_DATA }]);
+    expect(rows[1]).toEqual(AGREE_ROW);
     expect(CONSENT_CALLBACK_DATA).toBe("tc:ok");
   });
 
-  test("non-https base: no keyboard, the plain lines carry the addresses", () => {
-    expect(consentKeyboard("http://localhost:3000")).toBeUndefined();
-    expect(consentKeyboard("not a url")).toBeUndefined();
+  test("unusable URL base (http, loopback https, invalid): exactly one button, the agree callback", () => {
+    for (const base of ["http://localhost:3000", "https://localhost", "not a url"]) {
+      const rows = inlineRows(consentKeyboard(base));
+      expect(rows, base).toEqual([AGREE_ROW]);
+    }
   });
 });
 
 describe("buildConsentPrompt", () => {
-  test("a first /start is just the intro with the keyboard", () => {
+  test("a first /start is just the intro with the URL buttons and the agree button", () => {
     const prompt = buildConsentPrompt("none", "start", BASE);
     expect(prompt.text).toBe(CONSENT_INTRO);
-    expect(prompt.keyboard).toBeDefined();
+    expect(inlineRows(prompt.keyboard)).toEqual([
+      [
+        { text: "Terms", url: `${BASE}${LEGAL_PATHS.terms}` },
+        { text: "Privacy Policy", url: `${BASE}${LEGAL_PATHS.privacy}` },
+      ],
+      AGREE_ROW,
+    ]);
   });
 
   test("a stale user gets the again note first", () => {
@@ -188,10 +205,10 @@ describe("buildConsentPrompt", () => {
     expect(both.text).toBe(`${CONSENT_AGAIN_NOTE}\n\n${CONSENT_RESEND_NOTE}\n\n${CONSENT_INTRO}`);
   });
 
-  test("without usable button URLs the plain lines are appended and the keyboard is dropped", () => {
+  test("without usable button URLs the plain lines join the text and the keyboard keeps only the agree button", () => {
     const prompt = buildConsentPrompt("none", "start", "http://localhost:3000");
-    expect(prompt.keyboard).toBeUndefined();
     expect(prompt.text).toBe(`${CONSENT_INTRO}\n\n${CONSENT_PLAIN_LINES("http://localhost:3000")}`);
+    expect(inlineRows(prompt.keyboard)).toEqual([AGREE_ROW]);
   });
 });
 
@@ -206,16 +223,23 @@ describe("consentMiddleware", () => {
     expect(passed).toBe(false);
     expect(prompts).toHaveLength(1);
     expect(prompts[0].text).toBe(CONSENT_INTRO);
-    expect(prompts[0].keyboard).toBeDefined();
+    expect(inlineRows(prompts[0].keyboard)).toHaveLength(2);
     expect(spy.replies).toHaveLength(1);
     expect(upserts).toEqual([]);
   });
 
-  test("unknown user plain text: prompt with the resend note", async () => {
+  test("unknown user plain text: prompt with the resend note and the agree button", async () => {
     const spy = makeCtx({ fromId: USER_ID, text: "check this out" });
     const { deps, prompts } = makeDeps(null);
     await runGate(spy, deps);
     expect(prompts[0].text).toBe(`${CONSENT_RESEND_NOTE}\n\n${CONSENT_INTRO}`);
+    expect(inlineRows(prompts[0].keyboard)).toEqual([
+      [
+        { text: "Terms", url: `${BASE}${LEGAL_PATHS.terms}` },
+        { text: "Privacy Policy", url: `${BASE}${LEGAL_PATHS.privacy}` },
+      ],
+      AGREE_ROW,
+    ]);
   });
 
   test("unknown user photo, voice and document each get the prompt with the resend note", async () => {
@@ -247,11 +271,18 @@ describe("consentMiddleware", () => {
     expect(lookups).toEqual([]);
   });
 
-  test("a stale user gets the again note", async () => {
+  test("a stale user gets the again note and the agree button", async () => {
     const spy = makeCtx({ fromId: USER_ID, text: "/start" });
     const { deps, prompts } = makeDeps(staleRow());
     await runGate(spy, deps);
     expect(prompts[0].text).toBe(`${CONSENT_AGAIN_NOTE}\n\n${CONSENT_INTRO}`);
+    expect(inlineRows(prompts[0].keyboard)).toEqual([
+      [
+        { text: "Terms", url: `${BASE}${LEGAL_PATHS.terms}` },
+        { text: "Privacy Policy", url: `${BASE}${LEGAL_PATHS.privacy}` },
+      ],
+      AGREE_ROW,
+    ]);
   });
 
   test("an accepted user passes straight through untouched", async () => {
@@ -272,12 +303,27 @@ describe("consentMiddleware", () => {
     expect(spy.replies.map((r) => r.text)).toEqual([commandFailedReply()]);
   });
 
-  test("a non-https base sends plain lines instead of URL buttons", async () => {
+  test("a non-https base sends plain lines in the text and a keyboard with only the agree button", async () => {
     const spy = makeCtx({ fromId: USER_ID, text: "/start" });
     const { deps, prompts } = makeDeps(null, { appBaseUrl: "http://localhost:3000" });
     await runGate(spy, deps);
-    expect(prompts[0].keyboard).toBeUndefined();
     expect(prompts[0].text).toBe(`${CONSENT_INTRO}\n\n${CONSENT_PLAIN_LINES("http://localhost:3000")}`);
+    expect(inlineRows(prompts[0].keyboard)).toEqual([AGREE_ROW]);
+  });
+
+  test("every blocked sender keeps the agree button: none or stale, /start or other", async () => {
+    for (const user of [null, staleRow()]) {
+      for (const text of ["/start", "just a message"]) {
+        const spy = makeCtx({ fromId: USER_ID, text });
+        const { deps, prompts } = makeDeps(user, { appBaseUrl: "http://localhost:3000" });
+        await runGate(spy, deps);
+        expect(prompts, JSON.stringify({ user, text })).toHaveLength(1);
+        const rows = inlineRows(prompts[0].keyboard);
+        expect(rows, JSON.stringify({ user, text })).toEqual([AGREE_ROW]);
+        expect(rows[0][0].callback_data, JSON.stringify({ user, text })).toBe("tc:ok");
+        expect(rows[0][0].url, JSON.stringify({ user, text })).toBeUndefined();
+      }
+    }
   });
 
   test("a pre_checkout_query from an unaccepted user is answered false with the pay line", async () => {
