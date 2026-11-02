@@ -83,7 +83,7 @@ Follow `docs/DEPLOY.md` sections "What you need", "Environment variables", "The 
 
 ## 3. Database
 
-- [ ] **[Manager]** Apply the migrations in order in the Supabase SQL editor: `supabase/migrations/0001_init.sql`, then `0002_billing.sql`, then `0003_pending_actions.sql`, then anything newer in `supabase/migrations/` by number. One file at a time, each in one transaction.
+- [ ] **[Manager]** Apply the migrations in order in the Supabase SQL editor: `supabase/migrations/0001_init.sql`, then `0002_billing.sql`, then `0003_pending_actions.sql`, then `0004_terms_acceptance.sql`, then `0005_purchase_confirmations.sql`, then anything newer in `supabase/migrations/` by number. One file at a time, each in one transaction.
 - [ ] **[Manager]** Verify with counts (SQL editor, read only):
 
 ```sql
@@ -130,6 +130,7 @@ paysupport - help with a payment
 stripe listen --forward-to localhost:3000/api/stripe/webhook
 ```
 
+- [ ] **[User]** Test mode confirm gate check: Telegram: /pro shows the confirm prompt, no invoice until the tap; web: checkout needs the tick; a purchase_confirmations row appears per tap.
 - [ ] **[User]** Test purchases with the card `4242 4242 4242 4242`: monthly, yearly, and the PayNow year. After each: the `subscriptions` row exists (active, right provider), and `/billing` shows Pro with the Manage subscription button. Test a cancel from the customer portal and confirm the row goes `canceled`.
 - [ ] **[User]** Switch to live keys when everything above passed: activate the Stripe account, create the same product and prices in live mode, add the live webhook endpoint, then replace the five Stripe values in the env file and restart. No code changes.
 

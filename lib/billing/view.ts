@@ -3,6 +3,7 @@
 // only renders. Copy lives in exported constants so wording changes happen in
 // one place. No Stripe, env or db imports.
 import { PLANS, formatPrice, yearlySavingsPercent, type PlanId } from "./plans";
+import { PURCHASE_CONFIRM_FAILED, PURCHASE_CONFIRM_WEB_ERROR } from "./purchase-consent-copy";
 import type { PlanView } from "@/lib/dashboard/plan";
 import { buildPlanView } from "@/lib/dashboard/plan";
 import { isTestModeKey, managedPaymentsEnabled, stripeConfigured, type StripeEnvConfig } from "./stripe";
@@ -28,6 +29,11 @@ export const ERROR_BANNER =
 // Calm refusal when a stale PayNow request lands while Managed Payments is on.
 export const PAYNOW_UNAVAILABLE_LINE =
   "PayNow is not available right now. You can pay monthly or yearly with a card, or use Stars in the bot.";
+
+// Confirm gate banners: the tick is missing, or the tap could not be saved.
+// Both copy strings come from the client safe purchase-consent-copy leaf.
+export const CONFIRM_NEEDED_BANNER = PURCHASE_CONFIRM_WEB_ERROR;
+export const CONFIRM_FAILED_BANNER = PURCHASE_CONFIRM_FAILED;
 
 export const MONTHLY_LABEL = "Monthly";
 export const YEARLY_LABEL = "Yearly";
@@ -74,6 +80,10 @@ export function statusBanner(status: string | undefined | null): BillingBanner |
       return { tone: "error", message: ERROR_BANNER };
     case "paynow_unavailable":
       return { tone: "neutral", message: PAYNOW_UNAVAILABLE_LINE };
+    case "confirm_needed":
+      return { tone: "error", message: CONFIRM_NEEDED_BANNER };
+    case "confirm_failed":
+      return { tone: "error", message: CONFIRM_FAILED_BANNER };
     default:
       return null;
   }

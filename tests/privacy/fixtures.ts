@@ -293,6 +293,22 @@ export function baseTables(): Record<string, Row[]> {
         used_at: null,
       },
     ],
+    purchase_confirmations: [
+      {
+        id: "cccc2222-0000-4000-8000-000000000001",
+        user_id: USER_A,
+        channel: "telegram",
+        terms_version: "2026-10-01",
+        confirmed_at: "2026-10-03T04:00:00.000Z",
+      },
+      {
+        id: "cccc2222-0000-4000-8000-000000000002",
+        user_id: USER_B,
+        channel: "web",
+        terms_version: "2026-10-01",
+        confirmed_at: "2026-10-05T04:00:00.000Z",
+      },
+    ],
     ai_calls: [
       {
         id: "aaaa1111-0000-4000-8000-000000000001",

@@ -13,6 +13,7 @@ export type OwnedCounts = {
   subscriptions: number;
   usage_events: number;
   pending_actions: number;
+  purchase_confirmations: number;
   login_tokens: number;
   ai_calls: number;
 };
@@ -27,6 +28,7 @@ export const OWNED_TABLES: Array<{ table: keyof OwnedCounts; note?: string }> = 
   { table: "subscriptions" },
   { table: "usage_events" },
   { table: "pending_actions" },
+  { table: "purchase_confirmations" },
   { table: "login_tokens" },
   { table: "ai_calls", note: "rows kept, anonymised" },
 ];
@@ -55,6 +57,7 @@ export async function countOwnedRows(client: SupabaseClient, userId: string): Pr
     subscriptions: await countExact(client, "subscriptions", eqUser()),
     usage_events: await countExact(client, "usage_events", eqUser()),
     pending_actions: await countExact(client, "pending_actions", eqUser()),
+    purchase_confirmations: await countExact(client, "purchase_confirmations", eqUser()),
     login_tokens: await countExact(client, "login_tokens", eqUser()),
     ai_calls: await countExact(client, "ai_calls", eqUser()),
   };

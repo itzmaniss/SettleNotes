@@ -3,13 +3,13 @@
 import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth/session";
 import { acceptRedirectPath } from "@/lib/auth/paths";
-import { isBillingEnabled } from "@/lib/billing/flags";
+import { openPortalFor } from "@/lib/billing/stripe";
 import { getLatestSubscription } from "@/lib/billing/subscriptions";
-import { openPortalFor, startCheckoutFor } from "@/lib/billing/stripe";
 import { getStripe } from "@/lib/billing/stripe-client";
 import { getUserById } from "@/lib/db/queries";
 import { env } from "@/lib/env";
 import { hasAcceptedCurrentTerms } from "@/lib/legal/consent";
+import { realProCheckoutDeps, startProCheckout } from "./start-pro-checkout";
 
 // Thin server actions: the interval is the only untrusted input and is
 // schema checked inside startCheckoutFor; the user id always comes from the
@@ -30,14 +30,14 @@ async function acceptedBillingUserId(): Promise<string> {
 
 export async function startCheckout(formData: FormData): Promise<void> {
   const userId = await acceptedBillingUserId();
-  const url = await startCheckoutFor(formData.get("interval"), {
-    sessionUserId: async () => userId,
-    billingEnabled: isBillingEnabled,
-    env: () => env,
-    baseUrl: () => env.APP_BASE_URL,
-    createSession: (params) => getStripe().checkout.sessions.create(params),
-  });
-  redirect(url);
+  const outcome = await startProCheckout(userId, formData, realProCheckoutDeps());
+  if (outcome.kind === "missing_confirm") {
+    redirect("/billing?status=confirm_needed");
+  }
+  if (outcome.kind === "confirm_failed") {
+    redirect("/billing?status=confirm_failed");
+  }
+  redirect(outcome.url);
 }
 
 export async function openPortal(): Promise<void> {

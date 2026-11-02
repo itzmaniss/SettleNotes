@@ -1,6 +1,11 @@
 import { Chunk, ChunkButton, Sticker } from "@/components/settle";
 import { usageLine } from "@/lib/dashboard/plan";
 import {
+  PURCHASE_CONFIRM_BODY,
+  PURCHASE_CONFIRM_TITLE,
+  PURCHASE_CONFIRM_WEB_LABEL,
+} from "@/lib/billing/purchase-consent-copy";
+import {
   CLOSED_NOTE,
   MANAGE_BUTTON_LABEL,
   PAYNOW_LABEL,
@@ -12,7 +17,10 @@ import {
 
 // Presentational half of /billing: pure markup over the view-model, with the
 // two server actions handed in as form actions so tests can render this
-// without Next. Mobile first: one column, chunk pills are 44px tall.
+// without Next. Mobile first: one column, chunk pills are 44px tall. The
+// purchase confirm block (title, body, one checkbox) sits above the monthly
+// and yearly buttons inside a single form, so every paid checkout, PayNow
+// included, submits the confirm field the server action requires.
 export type BillingPanelProps = {
   view: BillingPageView;
   startCheckout: (formData: FormData) => void | Promise<void>;
@@ -101,35 +109,55 @@ export function BillingPanel({ view, startCheckout, openPortal }: BillingPanelPr
             >
               Go Pro
             </p>
-            <div className="mt-3 space-y-4">
-              {view.options.map((option) => (
-                <Chunk key={option.interval} tone="card" className="p-5">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <p className="font-display text-lg font-bold">{option.label}</p>
-                    <p className="font-display text-2xl font-extrabold">{option.price}</p>
-                  </div>
-                  {option.note !== null && (
-                    <p className="mt-1 text-sm text-muted-foreground">{option.note}</p>
-                  )}
-                  <form action={startCheckout} className="mt-4">
-                    <input type="hidden" name="interval" value={option.interval} />
-                    <ChunkButton tone="ink" type="submit" className="w-full justify-center">
-                      Choose {option.label}
-                    </ChunkButton>
-                  </form>
-                </Chunk>
-              ))}
-              {view.paynowAvailable && (
-                <Chunk tone="card" className="p-5">
-                  <form action={startCheckout}>
-                    <input type="hidden" name="interval" value="paynow" />
-                    <ChunkButton tone="card" type="submit" className="w-full justify-center">
+            <Chunk tone="card" className="mt-3 p-5">
+              <p className="font-display text-lg font-bold">{PURCHASE_CONFIRM_TITLE}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{PURCHASE_CONFIRM_BODY}</p>
+              <form action={startCheckout} className="mt-4">
+                <label className="flex min-h-[44px] items-center gap-3 rounded-2xl border border-border px-3 py-2">
+                  <input
+                    type="checkbox"
+                    name="confirm"
+                    value="on"
+                    required
+                    className="size-5 shrink-0 accent-foreground"
+                  />
+                  <span className="text-sm font-medium">{PURCHASE_CONFIRM_WEB_LABEL}</span>
+                </label>
+                <div className="mt-4 space-y-4">
+                  {view.options.map((option) => (
+                    <div key={option.interval}>
+                      <div className="flex items-baseline justify-between gap-3">
+                        <p className="font-display text-lg font-bold">{option.label}</p>
+                        <p className="font-display text-2xl font-extrabold">{option.price}</p>
+                      </div>
+                      {option.note !== null && (
+                        <p className="mt-1 text-sm text-muted-foreground">{option.note}</p>
+                      )}
+                      <ChunkButton
+                        tone="ink"
+                        type="submit"
+                        name="interval"
+                        value={option.interval}
+                        className="mt-3 w-full justify-center"
+                      >
+                        Choose {option.label}
+                      </ChunkButton>
+                    </div>
+                  ))}
+                  {view.paynowAvailable && (
+                    <ChunkButton
+                      tone="card"
+                      type="submit"
+                      name="interval"
+                      value="paynow"
+                      className="w-full justify-center"
+                    >
                       {PAYNOW_LABEL}
                     </ChunkButton>
-                  </form>
-                </Chunk>
-              )}
-            </div>
+                  )}
+                </div>
+              </form>
+            </Chunk>
             <p className="mt-4 text-sm text-muted-foreground">{PREFER_TELEGRAM_LINE}</p>
           </section>
         ) : null

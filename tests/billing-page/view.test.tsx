@@ -9,6 +9,8 @@ import {
   statusBanner,
   CANCELED_BANNER,
   CLOSED_NOTE,
+  CONFIRM_FAILED_BANNER,
+  CONFIRM_NEEDED_BANNER,
   ERROR_BANNER,
   MANAGE_BUTTON_LABEL,
   PAYNOW_LABEL,
@@ -113,13 +115,24 @@ describe("buildCurrentPlan", () => {
 });
 
 describe("statusBanner", () => {
-  test("the three known statuses, everything else quiet", () => {
+  test("the known statuses, everything else quiet", () => {
     expect(statusBanner("success")).toEqual({ tone: "success", message: SUCCESS_BANNER });
     expect(statusBanner("canceled")).toEqual({ tone: "neutral", message: CANCELED_BANNER });
     expect(statusBanner("error")).toEqual({ tone: "error", message: ERROR_BANNER });
+    expect(statusBanner("confirm_needed")).toEqual({ tone: "error", message: CONFIRM_NEEDED_BANNER });
+    expect(statusBanner("confirm_failed")).toEqual({ tone: "error", message: CONFIRM_FAILED_BANNER });
     expect(statusBanner(undefined)).toBeNull();
     expect(statusBanner("")).toBeNull();
     expect(statusBanner("hacked=1")).toBeNull();
+  });
+
+  test("the confirm gate banners keep the exact copy strings", () => {
+    expect(CONFIRM_NEEDED_BANNER).toBe(
+      "Please tick the box to continue. You have not been charged.",
+    );
+    expect(CONFIRM_FAILED_BANNER).toBe(
+      "I could not save that just now. Please try again in a minute. You have not been charged.",
+    );
   });
 });
 
@@ -224,6 +237,53 @@ describe("BillingPanel", () => {
     );
     expect(html).toContain(PAYNOW_LABEL);
     expect(html).toContain('value="paynow"');
+  });
+
+  test("the purchase confirm block: title, body, one checkbox, one form, both buttons", () => {
+    const html = render(freeView());
+    // One form holds the confirm checkbox and every paid checkout button.
+    expect((html.match(/<form/g) ?? [])).toHaveLength(1);
+    expect(html).toContain("Before you pay");
+    expect(html).toContain(
+      "Pro is a paid plan. You must be 18 or older, or have a parent or guardian who has read the Terms and agreed to this purchase.",
+    );
+    expect(html).toContain('type="checkbox"');
+    expect(html).toContain('name="confirm"');
+    expect(html).toContain("required");
+    expect(html).toContain("I am 18 or older, or a parent or guardian agreed");
+    // Order: title and body, then the checkbox, then the interval buttons.
+    const at = (needle: string) => html.indexOf(needle);
+    expect(at("Before you pay")).toBeLessThan(at('type="checkbox"'));
+    expect(at('type="checkbox"')).toBeLessThan(at('value="monthly"'));
+    expect(at('type="checkbox"')).toBeLessThan(at('value="yearly"'));
+    // PayNow rides the same form and the same confirm field.
+    const paynow = render(
+      freeView({ env: { ...openEnv, STRIPE_PRICE_PRO_YEARLY_PAYNOW: "price_paynow" } }),
+    );
+    expect((paynow.match(/<form/g) ?? [])).toHaveLength(1);
+    expect(paynow.indexOf('type="checkbox"')).toBeLessThan(paynow.indexOf('value="paynow"'));
+  });
+
+  test("the checkbox tap area is at least 44px: the label carries the min height", () => {
+    const html = render(freeView());
+    expect(html).toMatch(/min-h-\[44px\]/);
+    // The checkbox and its label text sit inside one label element.
+    const labelStart = html.indexOf("<label");
+    const checkboxAt = html.indexOf('type="checkbox"');
+    const labelText = html.indexOf("I am 18 or older, or a parent or guardian agreed");
+    expect(labelStart).toBeGreaterThan(-1);
+    expect(labelStart).toBeLessThan(checkboxAt);
+    expect(checkboxAt).toBeLessThan(labelText);
+    expect(html.slice(labelStart, html.indexOf("</label>"))).toContain("I am 18 or older");
+  });
+
+  test("the confirm_needed and confirm_failed statuses render the calm banners", () => {
+    const needed = render(freeView({ status: "confirm_needed" }));
+    expect(needed).toContain("Please tick the box to continue. You have not been charged.");
+    const failed = render(freeView({ status: "confirm_failed" }));
+    expect(failed).toContain(
+      "I could not save that just now. Please try again in a minute. You have not been charged.",
+    );
   });
 
   test("managed payments: paynow button gone, card options untouched", () => {

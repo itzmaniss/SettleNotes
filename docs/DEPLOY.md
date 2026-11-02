@@ -72,8 +72,9 @@ The sample `deploy/docker-compose.yml` points at `/opt/settle.env`. Change that 
    - `supabase/migrations/0002_billing.sql`
    - `supabase/migrations/0003_pending_actions.sql`
    - `supabase/migrations/0004_terms_acceptance.sql`
+   - `supabase/migrations/0005_purchase_confirmations.sql`
 
-   0002 creates the billing tables that sit dormant behind `BILLING_ENABLED=false` (the usage ledger writes from day one), so apply all of them. 0004 adds the terms acceptance columns the bot and web gates require. Alternative: `supabase link` then `supabase db push` using `SUPABASE_DB_URL`.
+   0002 creates the billing tables that sit dormant behind `BILLING_ENABLED=false` (the usage ledger writes from day one), so apply all of them. 0004 adds the terms acceptance columns the bot and web gates require. 0005 stores the purchase confirmations that must exist before any Pro payment, on Telegram and on the web. Alternative: `supabase link` then `supabase db push` using `SUPABASE_DB_URL`.
 2. Create the private `uploads` bucket. The SQL way, in the same editor:
 
 ```sql

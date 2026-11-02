@@ -115,6 +115,7 @@ describe("delete-user run", () => {
     expect(text).toContain("subscriptions 1");
     expect(text).toContain("usage_events 1");
     expect(text).toContain("pending_actions 1");
+    expect(text).toContain("purchase_confirmations 1");
     expect(text).toContain("login_tokens 1");
     expect(text).toContain("ai_calls 2");
     expect(text).toContain("stored files to remove: 3");
@@ -219,6 +220,7 @@ describe("export-user run", () => {
     const text = out.lines.join("\n");
     expect(text).toContain("Export written to /tmp/private/export.json with file mode 0600.");
     expect(text).toContain("uploads 2");
+    expect(text).toContain("purchase_confirmations 1");
     expect(text).toContain("stored files 3");
     expect(text).toContain("The file holds personal data");
     assertCleanOutput(out.lines);

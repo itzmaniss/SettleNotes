@@ -146,6 +146,7 @@ export async function runExport(
         `subscriptions ${data.subscriptions.length}`,
         `usage_events ${data.usage_events.length}`,
         `pending_actions ${data.pending_actions.length}`,
+        `purchase_confirmations ${data.purchase_confirmations.length}`,
         `ai calls ${data.ai_calls_summary.count}`,
         `stored files ${data.files.length}`,
       ].join(", "),

@@ -120,18 +120,23 @@ export function registerHandlers(bot: Bot, consentDeps: ConsentDeps = createCons
     consentAccept(ctx as unknown as ConsentCallbackContextLike, next),
   );
 
+  // The Pro purchase confirm taps (pc:ok / pc:no) plus /pro, /paysupport,
+  // pre_checkout_query and successful_payment. Registered here so the pc:
+  // callback sits next to tc:ok behind the consent gate middleware (an
+  // unaccepted sender never reaches it) and in front of the pending action
+  // callback, and so a payment message never reaches the catch-all "message"
+  // handler below.
+  registerPaymentHandlers(bot);
+
   // Taps on the Yes/No buttons of a low-confidence clarification. The
   // allowlist middleware above runs first for callback updates too (they carry
-  // ctx.from), so a stranger's tap is refused before reaching this.
+  // ctx.from), so a stranger's tap is refused before reaching this. The
+  // purchase confirm callback above hands every non pc: tap to next(), so
+  // pa: taps still arrive here.
   const pendingActionCallback = createPendingActionCallback();
   bot.on("callback_query:data", (ctx) =>
     pendingActionCallback(ctx as unknown as CallbackContextLike),
   );
-
-  // /pro, /paysupport, pre_checkout_query and successful_payment. Registered
-  // before the ingest handlers so a payment message never reaches the
-  // catch-all "message" handler.
-  registerPaymentHandlers(bot);
 
   registerIngestHandlers(bot);
 }

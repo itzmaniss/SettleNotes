@@ -16,7 +16,8 @@ export const DEFAULT_EXPORT_BUCKET = "uploads";
 export const EXPORT_NOTE =
   "Produced by the operator of this Settle deployment on the date in exported_at. " +
   "Included: the account row, uploads with their text and classification, tasks, task events, " +
-  "starters, weak spots, subscriptions, usage events, pending actions, a summary of AI usage, " +
+  "starters, weak spots, subscriptions, usage events, pending actions, purchase confirmations, " +
+  "a summary of AI usage, " +
   "and the list of files stored for this account. " +
   "Not included: login tokens and other security material, raw AI prompts and responses, " +
   "other students' data, signed file links, and the operator side payment records, which are " +
@@ -114,6 +115,12 @@ export type PendingActionExportRow = {
   resolved_at: string | null;
 };
 
+export type PurchaseConfirmationExportRow = {
+  channel: string;
+  terms_version: string;
+  confirmed_at: string;
+};
+
 export type AiCallExportRow = {
   purpose: string;
   input_tokens: number | null;
@@ -145,6 +152,7 @@ export type PrivacyExport = {
   subscriptions: SubscriptionExportRow[];
   usage_events: UsageEventExportRow[];
   pending_actions: PendingActionExportRow[];
+  purchase_confirmations: PurchaseConfirmationExportRow[];
   ai_calls_summary: AiCallsExportSummary;
   files: string[];
 };
@@ -297,6 +305,13 @@ export async function buildExport(
     eqUser,
     "created_at",
   );
+  const purchaseConfirmations = await fetchPaged<PurchaseConfirmationExportRow>(
+    client,
+    "purchase_confirmations",
+    "channel,terms_version,confirmed_at",
+    eqUser,
+    "confirmed_at",
+  );
   // Only the aggregate is exported, never the individual AI call rows.
   const aiRows = await fetchPaged<AiCallExportRow>(
     client,
@@ -318,6 +333,7 @@ export async function buildExport(
     subscriptions,
     usage_events: usageEvents,
     pending_actions: pendingActions,
+    purchase_confirmations: purchaseConfirmations,
     ai_calls_summary: summarizeAiCallsForExport(aiRows),
     files,
   };

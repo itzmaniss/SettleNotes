@@ -4,6 +4,12 @@
 import { InlineKeyboard } from "grammy";
 import { RATE_LIMIT } from "@/lib/telegram/limits";
 import { REFUND_WINDOW_DAYS } from "@/lib/billing/stars";
+import {
+  PURCHASE_CONFIRM_BODY,
+  PURCHASE_CONFIRM_BUTTON,
+  PURCHASE_CONFIRM_CANCEL,
+  PURCHASE_CONFIRM_TITLE,
+} from "@/lib/billing/purchase-consent-copy";
 import type { PendingActionKind } from "@/lib/clarify/types";
 import type { ExecuteResult } from "@/lib/pipeline/execute";
 import type { StarterReplyInfo } from "@/lib/pipeline/starters";
@@ -341,6 +347,26 @@ export function pendingActionKeyboard(pendingId: string): InlineKeyboard {
   return new InlineKeyboard()
     .text("Yes", pendingActionCallbackData(pendingId, true))
     .text("No", pendingActionCallbackData(pendingId, false));
+}
+
+// ---- Pro purchase confirmation (before any invoice) --------------------------
+// The confirm tap is a representation the student makes before paying; the
+// wording lives in lib/billing/purchase-consent-copy.ts (client safe).
+
+// Telegram caps callback data at 64 bytes; same pattern as tc:ok and pa:.
+export const PURCHASE_CONFIRM_CALLBACK_DATA = "pc:ok";
+export const PURCHASE_DECLINE_CALLBACK_DATA = "pc:no";
+
+export function purchaseConfirmPrompt(): string {
+  return `${PURCHASE_CONFIRM_TITLE}\n\n${PURCHASE_CONFIRM_BODY}`;
+}
+
+// Row 1 the confirm button, row 2 the cancel button.
+export function purchaseConfirmKeyboard(): InlineKeyboard {
+  return new InlineKeyboard()
+    .text(PURCHASE_CONFIRM_BUTTON, PURCHASE_CONFIRM_CALLBACK_DATA)
+    .row()
+    .text(PURCHASE_CONFIRM_CANCEL, PURCHASE_DECLINE_CALLBACK_DATA);
 }
 
 // Telegram keeps a message's old keyboard when an edit omits reply_markup;

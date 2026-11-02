@@ -14,6 +14,17 @@ import { getActiveSubscription, type ActiveSubscription } from "@/lib/billing/qu
 import { PLANS } from "@/lib/billing/plans";
 import { isBillingEnabled } from "@/lib/billing/flags";
 import {
+  requireLatestConfirmationAt,
+  hasRecentConfirmation,
+  recordPurchaseConfirmation,
+} from "@/lib/billing/purchase-consent";
+import {
+  PURCHASE_CONFIRM_DECLINED,
+  PURCHASE_CONFIRM_FAILED,
+  PURCHASE_CONFIRM_FIRST,
+  PURCHASE_CONFIRM_THANKS,
+} from "@/lib/billing/purchase-consent-copy";
+import {
   createSubscriptionsQueries,
 } from "@/lib/billing/subscriptions";
 import { getSupabase } from "@/lib/db/client";
@@ -23,6 +34,9 @@ import { hasAcceptedCurrentTerms } from "@/lib/legal/consent";
 import { CONSENT_PAY_FIRST } from "@/lib/legal/consent-copy";
 import {
   PRE_CHECKOUT_CLOSED_REPLY,
+  PURCHASE_CONFIRM_CALLBACK_DATA,
+  PURCHASE_DECLINE_CALLBACK_DATA,
+  clearedKeyboard,
   commandFailedReply,
   paySupportReply,
   preCheckoutErrorReply,
@@ -31,6 +45,8 @@ import {
   proInvoiceKeyboard,
   proInvoiceReply,
   proNotOnSaleReply,
+  purchaseConfirmKeyboard,
+  purchaseConfirmPrompt,
 } from "@/lib/telegram/replies";
 
 // Minimal structural view of the payment-related corners of a grammY context,
@@ -49,6 +65,16 @@ export type PaymentsContextLike = {
   answerPreCheckoutQuery: (ok: boolean, other?: { error_message?: string }) => Promise<unknown>;
 };
 
+// Structural view for the purchase confirm taps (pc:ok / pc:no).
+export type PurchaseConfirmCallbackContextLike = {
+  from?: User;
+  chat?: Chat;
+  callbackQuery?: { data?: string };
+  answerCallbackQuery: (other?: { text?: string }) => Promise<unknown>;
+  editMessageText: (text: string, other?: { reply_markup?: unknown }) => Promise<unknown>;
+  reply: (text: string, other?: { reply_markup?: unknown }) => Promise<unknown>;
+};
+
 export type PaymentsDeps = {
   billingEnabled: () => boolean;
   getUserByTelegramId: (telegramUserId: number) => Promise<UserRow | null>;
@@ -58,6 +84,15 @@ export type PaymentsDeps = {
     telegramUserId: number;
     payment: SuccessfulPaymentLike;
   }) => Promise<PaymentOutcome>;
+  // Records the confirm evidence row (channel telegram). Throws only on a
+  // broken caller; the handler treats any throw as not saved.
+  recordConfirmation: (
+    userId: string,
+    now: Date,
+  ) => Promise<{ ok: true } | { ok: false }>;
+  // Newest confirmation, null when none. A lookup error throws, so the
+  // pre-checkout gate can fail closed with an explicit failure line.
+  latestConfirmationAt: (userId: string) => Promise<Date | null>;
 };
 
 function logError(message: string, error?: unknown): void {
@@ -65,6 +100,23 @@ function logError(message: string, error?: unknown): void {
 }
 
 // ---- /pro ------------------------------------------------------------------
+
+// The invoice send shared by /pro (after a recorded confirm tap) and by the
+// pc:ok callback, so both surfaces build the offer exactly the same way.
+// Throws on failure; each caller decides how to report it.
+async function sendProInvoices(
+  deps: PaymentsDeps,
+  ctx: Pick<PaymentsContextLike, "reply">,
+  userId: string,
+): Promise<void> {
+  const offer = starsOffer(PLANS, deps.billingEnabled());
+  if (!offer.available) {
+    await ctx.reply(proNotOnSaleReply());
+    return;
+  }
+  const url = await deps.createInvoiceLink({ userId, amount: offer.amount });
+  await ctx.reply(proInvoiceReply(offer.amount), { reply_markup: proInvoiceKeyboard(url) });
+}
 
 export function createProCommand(deps: PaymentsDeps) {
   return async (ctx: PaymentsContextLike): Promise<void> => {
@@ -97,8 +149,9 @@ export function createProCommand(deps: PaymentsDeps) {
         await ctx.reply(proActiveReply(end != null && !Number.isNaN(end.getTime()) ? end : null));
         return;
       }
-      const url = await deps.createInvoiceLink({ userId: user.id, amount: offer.amount });
-      await ctx.reply(proInvoiceReply(offer.amount), { reply_markup: proInvoiceKeyboard(url) });
+      // No invoice here: first the student taps the confirm button. The
+      // pc:ok callback records the tap and only then sends the invoice.
+      await ctx.reply(purchaseConfirmPrompt(), { reply_markup: purchaseConfirmKeyboard() });
     } catch (error) {
       logError("[telegram] /pro failed", error);
       await ctx.reply(commandFailedReply());
@@ -145,11 +198,131 @@ export function createPreCheckoutHandler(deps: PaymentsDeps) {
         expected: { amount: offer.available ? offer.amount : null, userId: user?.id ?? "" },
         billingEnabled: deps.billingEnabled(),
       });
-      if (verdict.ok) await answer(true);
-      else await answer(false, verdict.message);
+      if (!verdict.ok) {
+        await answer(false, verdict.message);
+        return;
+      }
+      // Defense in depth: an old invoice can stay in the chat long after the
+      // prompt, so the confirm tap is re-checked here. A renewal by someone
+      // with an active Stars subscription is never blocked. A lookup error
+      // fails closed with the failure line.
+      try {
+        const now = new Date();
+        const confirmedAt = user != null ? await deps.latestConfirmationAt(user.id) : null;
+        if (hasRecentConfirmation(confirmedAt, now)) {
+          await answer(true);
+          return;
+        }
+        const active = user != null ? await deps.getActiveSubscription(user.id, now) : null;
+        if (active != null && active.provider === "stars") {
+          await answer(true);
+          return;
+        }
+        await answer(false, PURCHASE_CONFIRM_FIRST);
+      } catch (gateError) {
+        logError("[telegram] purchase confirm gate failed", gateError);
+        await answer(false, PURCHASE_CONFIRM_FAILED);
+      }
     } catch (error) {
       logError("[telegram] pre-checkout validation failed", error);
       await answer(false, preCheckoutErrorReply());
+    }
+  };
+}
+
+// ---- purchase confirm taps (pc:ok / pc:no) ----------------------------------
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function answerTapQuietly(ctx: PurchaseConfirmCallbackContextLike): Promise<void> {
+  try {
+    await ctx.answerCallbackQuery();
+  } catch (error) {
+    logError("[telegram] answering the purchase confirm tap failed:", describeError(error));
+  }
+}
+
+// The prompt message becomes the given text, keyboard removed. A failed edit
+// falls back to a plain reply so the student always sees the line.
+async function editPromptQuietly(ctx: PurchaseConfirmCallbackContextLike, text: string): Promise<void> {
+  try {
+    await ctx.editMessageText(text, { reply_markup: clearedKeyboard() });
+  } catch {
+    try {
+      await ctx.reply(text);
+    } catch (error) {
+      logError("[telegram] purchase confirm reply failed:", describeError(error));
+    }
+  }
+}
+
+async function replyQuietly(ctx: PurchaseConfirmCallbackContextLike, text: string): Promise<void> {
+  try {
+    await ctx.reply(text);
+  } catch (error) {
+    logError("[telegram] purchase confirm reply failed:", describeError(error));
+  }
+}
+
+/**
+ * Handles the pc:ok and pc:no taps and hands every other callback to next(),
+ * so the pending action resolver still sees its pa: taps. Registered inside
+ * registerPaymentHandlers, which bot.ts calls after the consent accept
+ * callback: unaccepted users are dropped by the consent gate middleware and
+ * never reach this, and pc: taps never fall into the pa: resolver.
+ *
+ * pc:ok records the evidence row first, then swaps the prompt for the thanks
+ * and sends the invoice; on a failed save nothing is sent. pc:no never writes
+ * and never invoices. A tap outside a private chat is ignored entirely, and
+ * a double tap just repeats a harmless sequence.
+ */
+export function createPurchaseConfirmCallback(deps: PaymentsDeps) {
+  return async (
+    ctx: PurchaseConfirmCallbackContextLike,
+    next?: () => Promise<void>,
+  ): Promise<void> => {
+    const data = ctx.callbackQuery?.data;
+    if (data !== PURCHASE_CONFIRM_CALLBACK_DATA && data !== PURCHASE_DECLINE_CALLBACK_DATA) {
+      if (next !== undefined) return next();
+      return;
+    }
+    const from = ctx.from;
+    // The prompt only ever appears in the student's private chat, so a stale
+    // button forwarded anywhere else is noise.
+    if (from === undefined || ctx.chat?.type !== "private") return;
+    await answerTapQuietly(ctx);
+    if (data === PURCHASE_DECLINE_CALLBACK_DATA) {
+      await editPromptQuietly(ctx, PURCHASE_CONFIRM_DECLINED);
+      return;
+    }
+    let user: UserRow | null = null;
+    try {
+      user = await deps.getUserByTelegramId(from.id);
+    } catch (error) {
+      logError("[telegram] purchase confirm user lookup failed", error);
+    }
+    if (user == null) {
+      await replyQuietly(ctx, PURCHASE_CONFIRM_FAILED);
+      return;
+    }
+    let saved: { ok: boolean } = { ok: false };
+    try {
+      saved = await deps.recordConfirmation(user.id, new Date());
+    } catch (error) {
+      logError("[telegram] saving the purchase confirmation failed", error);
+    }
+    if (!saved.ok) {
+      await replyQuietly(ctx, PURCHASE_CONFIRM_FAILED);
+      return;
+    }
+    await editPromptQuietly(ctx, PURCHASE_CONFIRM_THANKS);
+    try {
+      await sendProInvoices(deps, ctx, user.id);
+    } catch (error) {
+      logError("[telegram] invoice after purchase confirm failed", error);
+      await replyQuietly(ctx, commandFailedReply());
     }
   };
 }
@@ -190,6 +363,13 @@ function realPaymentsDeps(bot: Bot): PaymentsDeps {
     get getActiveSubscription() {
       return (userId: string, now: Date) => getActiveSubscription(userId, now);
     },
+    get recordConfirmation() {
+      return (userId: string, now: Date) =>
+        recordPurchaseConfirmation(getSupabase(), { userId, channel: "telegram", now });
+    },
+    get latestConfirmationAt() {
+      return (userId: string) => requireLatestConfirmationAt(getSupabase(), userId);
+    },
     get createInvoiceLink() {
       return (args: StarsInvoiceArgs) =>
         createStarsInvoiceLink(
@@ -227,6 +407,16 @@ export function registerPaymentHandlers(bot: Bot, overrides: Partial<PaymentsDep
   bot.command("pro", (ctx) => createProCommand(deps)(ctx as unknown as PaymentsContextLike));
   bot.command("paysupport", (ctx) =>
     createPaySupportCommand()(ctx as unknown as Pick<PaymentsContextLike, "reply">),
+  );
+  // The purchase confirm taps. bot.ts registers payment handlers right after
+  // the consent accept callback, so pc: taps sit next to tc:ok (behind the
+  // consent gate) and in front of the pa: resolver, which sees everything
+  // this handler hands to next().
+  bot.on("callback_query:data", (ctx, next) =>
+    createPurchaseConfirmCallback(deps)(
+      ctx as unknown as PurchaseConfirmCallbackContextLike,
+      next,
+    ),
   );
   bot.on("pre_checkout_query", (ctx) =>
     createPreCheckoutHandler(deps)(ctx as unknown as PaymentsContextLike),

@@ -114,3 +114,14 @@ export type AiCallRow = {
   ok: boolean;
   created_at: string;
 };
+
+// One tap of the purchase confirm button (migration 0005). The channel says
+// which surface recorded it; no age is stored, the row is the representation
+// evidence only.
+export type PurchaseConfirmationRow = {
+  id: string;
+  user_id: string;
+  channel: "telegram" | "web";
+  terms_version: string;
+  confirmed_at: string;
+};

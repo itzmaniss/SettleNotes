@@ -26,6 +26,7 @@ describe("buildExport", () => {
         "files",
         "note",
         "pending_actions",
+        "purchase_confirmations",
         "starters",
         "subscriptions",
         "task_events",
@@ -105,7 +106,7 @@ describe("buildExport", () => {
     const fake = makeFakeDb(baseTables(), { objects: BASE_OBJECTS });
     await buildExport(fake.client, USER_A, { bucket: "uploads", now: NOW });
     const selects = fake.ops.filter((op): op is Extract<(typeof fake.ops)[number], { kind: "select" }> => op.kind === "select");
-    expect(selects.length).toBe(10);
+    expect(selects.length).toBe(11);
     for (const op of selects) {
       const hit = op.filters.some(
         (f) =>

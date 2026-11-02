@@ -21,14 +21,19 @@ import { PLANS } from "../../lib/billing/plans";
 import { buildStarsPayload } from "../../lib/billing/stars";
 import { TERMS_VERSION } from "../../lib/legal/version";
 import { CONSENT_PAY_FIRST } from "../../lib/legal/consent-copy";
+import { PURCHASE_CONFIRM_FIRST } from "../../lib/billing/purchase-consent-copy";
 import {
   PRE_CHECKOUT_CLOSED_REPLY,
+  PURCHASE_CONFIRM_CALLBACK_DATA,
+  PURCHASE_DECLINE_CALLBACK_DATA,
   paySupportReply,
   preCheckoutErrorReply,
   proActivatedReply,
   proActiveReply,
   proInvoiceReply,
   proNotOnSaleReply,
+  purchaseConfirmKeyboard,
+  purchaseConfirmPrompt,
 } from "../../lib/telegram/replies";
 import { ALLOWED_ID, SECRET, STRANGER_ID, webhookRequest } from "./fixtures";
 
@@ -90,12 +95,14 @@ function makeCtx(
 
 type PaymentsDepsSpy = PaymentsDeps & {
   invoices: Array<{ userId: string; amount: number }>;
+  confirmations: Array<{ userId: string; now: Date }>;
 };
 
 function makeDeps(
   overrides: Partial<PaymentsDeps> & { userUuid?: string; userAccepted?: boolean } = {},
 ): PaymentsDepsSpy {
   const invoices: Array<{ userId: string; amount: number }> = [];
+  const confirmations: Array<{ userId: string; now: Date }> = [];
   const userUuid = overrides.userUuid ?? USER_UUID;
   const userAccepted = overrides.userAccepted ?? true;
   const makeUser = () => ({
@@ -112,12 +119,19 @@ function makeDeps(
     billingEnabled: () => true,
     getUserByTelegramId: async (id) => (id === ALLOWED_ID ? makeUser() : null),
     getActiveSubscription: async () => null,
+    recordConfirmation: async (userId, now) => {
+      confirmations.push({ userId, now });
+      return { ok: true };
+    },
+    // One minute old by default: inside the confirm window.
+    latestConfirmationAt: async () => new Date(Date.now() - 60 * 1000),
     createInvoiceLink: async (args) => {
       invoices.push(args);
       return `https://t.me/invoice-${args.amount}`;
     },
     handleSuccessfulPayment: async () => ({ kind: "duplicate" }),
     invoices,
+    confirmations,
     ...overrides,
   };
 }
@@ -209,21 +223,37 @@ describe("/pro command", () => {
     expect(deps.invoices).toHaveLength(0);
   });
 
-  test("available: one invoice and one reply with a single Pay with Stars button", async () => {
-    const deps = makeDeps();
+  test("available: the confirm prompt with the pc keyboard, no invoice, nothing written", async () => {
+    const deps = makeDeps({
+      createInvoiceLink: async () => {
+        throw new Error("must not be called before the tap");
+      },
+    });
     const { ctx, replies } = makeCtx({ fromId: ALLOWED_ID });
     await createProCommand(deps)(ctx);
 
-    expect(deps.invoices).toEqual([{ userId: USER_UUID, amount: 600 }]);
+    expect(deps.invoices).toHaveLength(0);
+    expect(deps.confirmations).toHaveLength(0);
     expect(replies).toHaveLength(1);
-    expect(replies[0].text).toBe(proInvoiceReply(600));
+    expect(replies[0].text).toBe(purchaseConfirmPrompt());
+    expect(purchaseConfirmPrompt()).toBe(
+      "Before you pay\n\nPro is a paid plan. You must be 18 or older, or have a parent or guardian who has read the Terms and agreed to this purchase.",
+    );
     const keyboard = replies[0].markup as {
-      inline_keyboard: Array<Array<{ text: string; url: string }>>;
+      inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
     };
-    expect(keyboard.inline_keyboard).toHaveLength(1);
-    expect(keyboard.inline_keyboard[0]).toEqual([
-      { text: "Pay with Stars", url: "https://t.me/invoice-600" },
+    expect(keyboard.inline_keyboard).toEqual([
+      [
+        {
+          text: "I am 18 or older, or a parent or guardian agreed",
+          callback_data: PURCHASE_CONFIRM_CALLBACK_DATA,
+        },
+      ],
+      [{ text: "Not now", callback_data: PURCHASE_DECLINE_CALLBACK_DATA }],
     ]);
+    expect(JSON.stringify(keyboard)).toBe(JSON.stringify(purchaseConfirmKeyboard()));
+    expect(PURCHASE_CONFIRM_CALLBACK_DATA).toBe("pc:ok");
+    expect(PURCHASE_DECLINE_CALLBACK_DATA).toBe("pc:no");
   });
 
   test("already active: the end date reply and no invoice", async () => {
@@ -245,18 +275,7 @@ describe("/pro command", () => {
     const { ctx, replies } = makeCtx({ fromId: ALLOWED_ID });
     await createProCommand(deps)(ctx);
     expect(deps.invoices).toHaveLength(0);
-    expect(replies).toHaveLength(1);
-    expect(replies[0].text).toMatch(/try that again/i);
-  });
-
-  test("an invoice failure becomes a plain failure reply, never a throw", async () => {
-    const deps = makeDeps({
-      createInvoiceLink: async () => {
-        throw new Error("telegram down");
-      },
-    });
-    const { ctx, replies } = makeCtx({ fromId: ALLOWED_ID });
-    await createProCommand(deps)(ctx);
+    expect(deps.confirmations).toHaveLength(0);
     expect(replies).toHaveLength(1);
     expect(replies[0].text).toMatch(/try that again/i);
   });
@@ -329,6 +348,43 @@ describe("pre_checkout_query handler", () => {
     expect(answers[0].ok).toBe(false);
     expect(answers[0].message).toMatch(/different account/);
   });
+
+  test("answers false with the confirm line when no confirmation exists", async () => {
+    const deps = makeDeps({
+      latestConfirmationAt: async () => null,
+    });
+    const { ctx, answers } = makeCtx({ fromId: ALLOWED_ID, preCheckout: goodQuery });
+    await createPreCheckoutHandler(deps)(ctx);
+    expect(answers).toEqual([{ ok: false, message: PURCHASE_CONFIRM_FIRST }]);
+  });
+
+  test("answers false with the failure line when the confirmation lookup errors", async () => {
+    const deps = makeDeps({
+      latestConfirmationAt: async () => {
+        throw new Error("db down");
+      },
+    });
+    const { ctx, answers } = makeCtx({ fromId: ALLOWED_ID, preCheckout: goodQuery });
+    await createPreCheckoutHandler(deps)(ctx);
+    expect(answers).toHaveLength(1);
+    expect(answers[0].ok).toBe(false);
+    expect(answers[0].message).toMatch(/could not save/);
+    expect(answers[0].message).toMatch(/not been charged/);
+  });
+
+  test("answers false with the confirm line for a non Stars active subscriber", async () => {
+    const deps = makeDeps({
+      latestConfirmationAt: async () => null,
+      getActiveSubscription: async () => ({
+        plan: "pro",
+        provider: "stripe",
+        current_period_end: "2026-12-05T02:00:00.000Z",
+      }),
+    });
+    const { ctx, answers } = makeCtx({ fromId: ALLOWED_ID, preCheckout: goodQuery });
+    await createPreCheckoutHandler(deps)(ctx);
+    expect(answers).toEqual([{ ok: false, message: PURCHASE_CONFIRM_FIRST }]);
+  });
 });
 
 // ---- successful_payment ----------------------------------------------------
@@ -387,13 +443,14 @@ describe("successful_payment handler", () => {
     expect(replies).toHaveLength(0);
   });
 
-  test("payment registration adds all four handlers", () => {
+  test("payment registration adds the pro command, the confirm callback and the payment handlers", () => {
     const { bot, registrations } = makeFakeBot();
     registerPaymentHandlers(bot, makeDeps());
     const names = registrations.map((r) => `${r.kind}:${r.name}`);
     expect(names).toEqual([
       "command:pro",
       "command:paysupport",
+      "on:callback_query:data",
       "on:pre_checkout_query",
       "on:message:successful_payment",
     ]);

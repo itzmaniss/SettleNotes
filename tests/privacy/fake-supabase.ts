@@ -121,6 +121,9 @@ export function makeFakeDb(tables: Record<string, Row[]>, opts: FakeOptions = {}
     data.subscriptions = (data.subscriptions ?? []).filter((r) => r.user_id !== userId);
     data.usage_events = (data.usage_events ?? []).filter((r) => r.user_id !== userId);
     data.pending_actions = (data.pending_actions ?? []).filter((r) => r.user_id !== userId);
+    data.purchase_confirmations = (data.purchase_confirmations ?? []).filter(
+      (r) => r.user_id !== userId,
+    );
     data.login_tokens = (data.login_tokens ?? []).filter((r) => r.user_id !== userId);
     for (const row of data.ai_calls ?? []) {
       if (row.user_id === userId) row.user_id = null;
