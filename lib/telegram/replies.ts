@@ -129,6 +129,51 @@ export function mathPendingReply(): string {
   return "That looks like math working. Checking it is almost ready, so hang tight.";
 }
 
+// ---- Practice set with hidden answers ---------------------------------------
+// The answers block of the math practice set goes out as Telegram HTML with
+// every answer behind a tap to reveal spoiler, so the questions are not
+// spoiled by the worked answers sitting right underneath them.
+
+// Telegram's hard per-message cap in characters.
+export const TELEGRAM_MAX_CHARS = 4096;
+
+// Full HTML escaping of model text: nothing the model writes can ever
+// become markup, close the spoiler tag or add a link.
+export function escapeHtmlText(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+export type PracticeMessage = {
+  // Exactly what to send: escaped HTML when parseMode is set, raw text else.
+  text: string;
+  parseMode?: "HTML";
+  // The unescaped original, for the plain text fallback send.
+  plainText: string;
+};
+
+// Wraps everything from the "Answers:" heading onwards in <tg-spoiler>. The
+// questions part is escaped too, since the message then travels with
+// parse_mode HTML. When the escaped text would not fit one Telegram message,
+// the whole set goes out plain with answers visible instead of split across
+// messages where spoiler tags could not stay balanced.
+export function practiceMessage(practiceText: string): PracticeMessage {
+  const marker = "\n\nAnswers:\n";
+  const at = practiceText.indexOf(marker);
+  if (at === -1) {
+    // No answers block: nothing to hide, so no HTML on the wire either.
+    return { text: practiceText, plainText: practiceText };
+  }
+  const questions = practiceText.slice(0, at);
+  // The answers block starts at the heading itself, so the tap to reveal
+  // covers the heading and every worked answer.
+  const answersBlock = practiceText.slice(at + 2);
+  const html = `${escapeHtmlText(questions)}\n\n<tg-spoiler>${escapeHtmlText(answersBlock)}</tg-spoiler>`;
+  if (html.length > TELEGRAM_MAX_CHARS) {
+    return { text: practiceText, plainText: practiceText };
+  }
+  return { text: html, parseMode: "HTML", plainText: practiceText };
+}
+
 export function failureReply(): string {
   return "Sorry, I couldn't read that one. Could you send a clearer photo or the PDF instead?";
 }

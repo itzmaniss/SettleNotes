@@ -96,12 +96,18 @@ describe('FLASHCARDS_SYSTEM_PROMPT', () => {
     expect(FLASHCARDS_SYSTEM_PROMPT).toContain('empty cards and practice arrays');
   });
 
-  test('sets the dollar-sign convention for fronts, backs and practice', () => {
-    expect(FLASHCARDS_SYSTEM_PROMPT).toContain('single dollar signs');
-    expect(FLASHCARDS_SYSTEM_PROMPT).toContain('Differentiate $\\sin(3x)$.');
-    expect(FLASHCARDS_SYSTEM_PROMPT).toContain('The derivative is $3\\cos(3x)$.');
+  test('demands plain text maths, never LaTeX or dollar signs', () => {
+    expect(FLASHCARDS_SYSTEM_PROMPT).toContain(
+      'write all maths in plain text a phone chat can show. Never use LaTeX, dollar signs or backslash commands.',
+    );
+    expect(FLASHCARDS_SYSTEM_PROMPT).toContain('Use x^2 style or Unicode superscripts like x²');
+    expect(FLASHCARDS_SYSTEM_PROMPT).toContain('write fractions as a/b, roots as √, plus or minus as ±');
     expect(FLASHCARDS_SYSTEM_PROMPT).toContain('card fronts and backs and practice questions and answers');
-    expect(FLASHCARDS_SYSTEM_PROMPT).toContain('Never put a whole sentence inside the dollars');
+    // The old dollar-wrapping instruction must be gone: it contradicts the
+    // plain text rule.
+    expect(FLASHCARDS_SYSTEM_PROMPT).not.toContain('single dollar signs');
+    expect(FLASHCARDS_SYSTEM_PROMPT).not.toContain('Differentiate');
+    expect(FLASHCARDS_SYSTEM_PROMPT).not.toContain('\\sin');
   });
 });
 

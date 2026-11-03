@@ -44,6 +44,7 @@ import {
   pendingActionKeyboard,
   pdfTruncatedNote,
   pdfUnreadableReply,
+  practiceMessage,
   rateLimitReply,
   summaryReply,
   unknownCommandReply,
@@ -61,7 +62,7 @@ export type BotContextLike = {
   message?: Message;
   reply: (
     text: string,
-    other?: { reply_markup?: unknown; reply_parameters?: unknown },
+    other?: { reply_markup?: unknown; reply_parameters?: unknown; parse_mode?: unknown },
   ) => Promise<unknown>;
   replyWithPhoto: (
     photo: InputFile,
@@ -595,8 +596,33 @@ async function sendMathOutcome(
   } else {
     await replySafely(ctx, outcome.caption);
   }
-  if (outcome.practiceText != null) await replySafely(ctx, outcome.practiceText);
+  if (outcome.practiceText != null) await sendPracticeSet(ctx, outcome.practiceText, botToken);
   if (outcome.extra != null) await replySafely(ctx, outcome.extra);
+}
+
+// The practice set goes out as Telegram HTML with the answers block behind a
+// tap to reveal spoiler (practiceMessage builds the escaped payload). When
+// Telegram rejects that send, a 400 parse error among other things, the very
+// same set goes out as plain text with the answers visible: a failed send
+// must never lose the practice questions.
+async function sendPracticeSet(
+  ctx: BotContextLike,
+  practiceText: string,
+  botToken: string,
+): Promise<void> {
+  const message = practiceMessage(practiceText);
+  const options = {
+    ...replyParamsFor(ctx.message),
+    ...(message.parseMode != null ? { parse_mode: message.parseMode } : {}),
+  };
+  const hasOptions = Object.keys(options).length > 0;
+  try {
+    await ctx.reply(message.text, hasOptions ? options : undefined);
+    return;
+  } catch (error) {
+    console.error("[telegram] practice reply failed:", messageOf(error, botToken));
+  }
+  await replySafely(ctx, message.plainText);
 }
 
 async function replySafely(

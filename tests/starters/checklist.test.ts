@@ -65,6 +65,14 @@ describe('CHECKLIST_SYSTEM_PROMPT', () => {
     expect(CHECKLIST_SYSTEM_PROMPT).toContain('always false');
     expect(CHECKLIST_SYSTEM_PROMPT).toContain('empty items array');
   });
+
+  test('demands plain text maths, never LaTeX or dollar signs', () => {
+    expect(CHECKLIST_SYSTEM_PROMPT).toContain(
+      'write all maths in plain text a phone chat can show. Never use LaTeX, dollar signs or backslash commands.',
+    );
+    expect(CHECKLIST_SYSTEM_PROMPT).toContain('Use x^2 style or Unicode superscripts like x²');
+    expect(CHECKLIST_SYSTEM_PROMPT).toContain('write fractions as a/b, roots as √, plus or minus as ±');
+  });
 });
 
 describe('buildChecklistUserText', () => {

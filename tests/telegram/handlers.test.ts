@@ -88,13 +88,19 @@ function makePdf(pageCount: number): Buffer {
 
 type CtxSpy = {
   ctx: BotContextLike;
-  replies: Array<{ text: string; other?: { reply_markup?: unknown; reply_parameters?: unknown } }>;
+  replies: Array<{
+    text: string;
+    other?: { reply_markup?: unknown; reply_parameters?: unknown; parse_mode?: unknown };
+  }>;
   photos: Array<{ caption?: string; bytes: number; markup: unknown; replyParams: unknown }>;
   typingCount: () => number;
 };
 
 function makeCtx(message: Record<string, unknown>): CtxSpy {
-  const replies: Array<{ text: string; other?: { reply_markup?: unknown; reply_parameters?: unknown } }> = [];
+  const replies: Array<{
+    text: string;
+    other?: { reply_markup?: unknown; reply_parameters?: unknown; parse_mode?: unknown };
+  }> = [];
   const photos: CtxSpy["photos"] = [];
   let typing = 0;
   const ctx: BotContextLike = {
@@ -619,9 +625,99 @@ describe("math diagnosis replies", () => {
     expect(spy.photos[0].caption).toBe("Step 2 is where it slipped: 5 - 2 is 3, not 2");
     expect(spy.photos[0].bytes).toBe("annotated-jpeg-bytes".length);
     expect(spy.photos[0].markup).toBeUndefined();
-    expect(spy.replies.map((r) => r.text)).toEqual(["1 to try:\n1. 7 - 3 = ?\n\nAnswers:\n1. 4"]);
-    // The practice message carries no keyboard of its own.
-    expect(spy.replies[0].other).toBeUndefined();
+    expect(spy.replies.map((r) => r.text)).toEqual([
+      "1 to try:\n1. 7 - 3 = ?\n\n<tg-spoiler>Answers:\n1. 4</tg-spoiler>",
+    ]);
+    // The practice message hides the answers block behind a spoiler and
+    // travels as escaped HTML, with no keyboard of its own.
+    expect(spy.replies[0].other).toEqual({ parse_mode: "HTML" });
+  });
+
+  test("a rejected HTML practice send falls back to plain text, answers visible", async () => {
+    const jpeg = await tinyJpeg();
+    const spy = makeCtx(photoMessage);
+    const practiceText = "1 to try:\n1. 7 - 3 = ?\n\nAnswers:\n1. 4";
+    const { deps } = makeDeps({
+      fileBuffer: jpeg,
+      ingestOutcome: {
+        kind: "math",
+        caption: "Step 2 is where it slipped: 5 - 2 is 3, not 2",
+        annotated: null,
+        practiceText,
+        extra: null,
+      },
+    });
+    // Telegram rejecting the HTML (a 400 parse error) on the first send.
+    const realReply = spy.ctx.reply.bind(spy.ctx);
+    spy.ctx.reply = async (text, other) => {
+      if (other && "parse_mode" in other) {
+        throw new Error("Bad Request: can't parse entities");
+      }
+      return realReply(text, other);
+    };
+
+    await handlePhotoMessage(spy.ctx, deps);
+
+    expect(spy.replies).toHaveLength(2);
+    // The same practice set, unescaped, answers visible, no parse mode.
+    expect(spy.replies[1].text).toBe(practiceText);
+    expect(spy.replies[1].other).toBeUndefined();
+    expect(spy.replies[1].text).not.toContain("<tg-spoiler>");
+  });
+
+  test("the spoiler send keeps the reply linked to the student's message", async () => {
+    const jpeg = await tinyJpeg();
+    const linkedMessage = {
+      message_id: 55,
+      photo: [{ file_id: "photo-1", width: 100, height: 100 }],
+      caption: null,
+      date: 1,
+      chat: { id: 101, type: "private" },
+      from: { id: 101, is_bot: false, first_name: "Tim" },
+    };
+    const spy = makeCtx(linkedMessage);
+    const { deps } = makeDeps({
+      fileBuffer: jpeg,
+      ingestOutcome: {
+        kind: "math",
+        caption: "Step 1 is where it slipped: dropped a sign",
+        annotated: null,
+        practiceText: "1 to try:\n1. 9 - 4 = ?\n\nAnswers:\n1. 5",
+        extra: null,
+      },
+    });
+
+    await handlePhotoMessage(spy.ctx, deps);
+
+    expect(spy.replies[1].other).toEqual({
+      reply_parameters: { message_id: 55, allow_sending_without_reply: true },
+      parse_mode: "HTML",
+    });
+    expect(spy.replies[1].text).toContain("<tg-spoiler>Answers:\n1. 5</tg-spoiler>");
+  });
+
+  test("a practice set too long for one Telegram message goes out plain", async () => {
+    const jpeg = await tinyJpeg();
+    const spy = makeCtx(photoMessage);
+    const longQuestion = "x".repeat(4100);
+    const practiceText = `1 to try:\n1. Solve ${longQuestion}=0.\n\nAnswers:\n1. x=0.`;
+    const { deps } = makeDeps({
+      fileBuffer: jpeg,
+      ingestOutcome: {
+        kind: "math",
+        caption: "Every step checks out.",
+        annotated: null,
+        practiceText,
+        extra: null,
+      },
+    });
+
+    await handlePhotoMessage(spy.ctx, deps);
+
+    expect(spy.replies).toHaveLength(2);
+    expect(spy.replies[1].text).toBe(practiceText);
+    expect(spy.replies[1].other).toBeUndefined();
+    expect(spy.replies[1].text).not.toContain("<tg-spoiler>");
   });
 
   test("correct working: caption only, as a text reply, no photo", async () => {

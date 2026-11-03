@@ -3,6 +3,7 @@
 import { useOptimistic, useState, useTransition } from "react";
 import { toggleChecklistItem } from "@/app/(dashboard)/actions";
 import { Check } from "@/components/settle";
+import { toPlainMath } from "@/lib/text/plain-math";
 import type { ChecklistItem } from "@/lib/starters/types";
 import { cn } from "@/lib/utils";
 import { Eyebrow } from "./eyebrow";
@@ -65,7 +66,9 @@ export function ChecklistView({ taskId, starterId, items }: ChecklistViewProps) 
                   />
                   <div className="min-w-0 flex-1">
                     <p className={cn("text-sm leading-relaxed", item.done && "text-muted-foreground line-through")}>
-                      {item.text}
+                      {/* Checklist text renders raw (no KaTeX here), so any
+                          LaTeX that slipped through comes out as plain text. */}
+                      {toPlainMath(item.text)}
                     </p>
                     {item.page != null && (
                       <p className="mt-0.5 font-mono text-xs text-muted-foreground">p.{item.page}</p>

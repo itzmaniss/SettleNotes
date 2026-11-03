@@ -17,6 +17,7 @@ Extract only what is actually written in the brief. Never invent requirements. E
 
 FORMAT
 - Each item is a short imperative plain-text instruction a student can act on directly, for example "Submit report as PDF, max 10 pages".
+- If any item needs maths, write all maths in plain text a phone chat can show. Never use LaTeX, dollar signs or backslash commands. Use x^2 style or Unicode superscripts like x², write fractions as a/b, roots as √, plus or minus as ±.
 - id is 'c1', 'c2', ... in document order.
 - page is the 1-based PDF page the item appears on, or null when you cannot tell.
 - done is always false. The student ticks items off in the app later; never pre-check anything.

@@ -17,6 +17,7 @@ import {
   diagnosisCaption,
   diagnosisPracticeText,
   repairDiagnosis,
+  toSecondPerson,
 } from '../../lib/starters/math';
 import { TOPIC_HINTS, isMathTopic, normalizeTopic } from '../../lib/starters/math-topics';
 import { MATH_TOPICS, MathDiagnosisSchema } from '../../lib/starters/types';
@@ -159,10 +160,12 @@ describe('MATH_SYSTEM_PROMPT', () => {
     expect(MATH_SYSTEM_PROMPT).toContain('exactly 3 new questions');
   });
 
-  test('sets the dollar-sign convention for sentence fields, raw latex for steps', () => {
-    expect(MATH_SYSTEM_PROMPT).toContain('single dollar signs');
-    expect(MATH_SYSTEM_PROMPT).toContain('Differentiate $(2x-7)^6$.');
-    expect(MATH_SYSTEM_PROMPT).toContain('The answer is $12(2x-7)^5$.');
+  test('demands plain text maths, never LaTeX or dollar signs', () => {
+    expect(MATH_SYSTEM_PROMPT).toContain(
+      'Write all maths in plain text a phone chat can show. Never use LaTeX, dollar signs or backslash commands.',
+    );
+    expect(MATH_SYSTEM_PROMPT).toContain('Use x^2 style or Unicode superscripts like x²');
+    expect(MATH_SYSTEM_PROMPT).toContain('write fractions as a/b, roots as √, plus or minus as ±');
     for (const field of [
       'practice[].question',
       'practice[].answer',
@@ -175,7 +178,18 @@ describe('MATH_SYSTEM_PROMPT', () => {
     }
     expect(MATH_SYSTEM_PROMPT).toContain('WITHOUT dollar signs');
     expect(MATH_SYSTEM_PROMPT).toMatch(/steps\[\]\.latex_or_text[\s\S]*WITHOUT dollar signs/);
-    expect(MATH_SYSTEM_PROMPT).toContain('Never put a whole sentence inside the dollars');
+    // The old dollar-wrapping instruction must be gone: it contradicts the
+    // plain text rule.
+    expect(MATH_SYSTEM_PROMPT).not.toContain('single dollar signs');
+    expect(MATH_SYSTEM_PROMPT).not.toContain('Differentiate $(2x-7)^6$.');
+  });
+
+  test('demands second person voice in the verdict fields', () => {
+    expect(MATH_SYSTEM_PROMPT).toContain('VOICE');
+    expect(MATH_SYSTEM_PROMPT).toContain('Speak to the student directly');
+    expect(MATH_SYSTEM_PROMPT).toContain('"Your final answers match..."');
+    expect(MATH_SYSTEM_PROMPT).toContain('"Check your step 3..."');
+    expect(MATH_SYSTEM_PROMPT).toContain('Never write about "the student" in these fields');
   });
 });
 
@@ -353,6 +367,39 @@ describe('diagnosisCaption', () => {
     expect(caption).toBe('Every step checks out. The true answer is x = 4, but the working ends at x = 6.');
   });
 
+  test('converts LaTeX in the verdict fields to plain phone text', () => {
+    const d = correctDiagnosis();
+    d.final_answer_check =
+      'Your final answers $x=1$ and $x=-5$ match the true solutions of $x^2+4x-5=0$.';
+    const caption = diagnosisCaption(d);
+    expect(caption).toBe(
+      'Every step checks out. Your final answers x=1 and x=-5 match the true solutions of x²+4x-5=0.',
+    );
+    expect(caption).not.toContain('$');
+    expect(caption).not.toContain('\\');
+  });
+
+  test('rewrites a leading "The student\'s" to second person, owner example', () => {
+    const d = correctDiagnosis();
+    d.final_answer_check =
+      "The student's final answers $x=1$ and $x=-5$ match the true solutions of $x^2+4x-5=0$.";
+    const caption = diagnosisCaption(d);
+    expect(caption.startsWith("Every step checks out. Your final answers x=1")).toBe(true);
+    expect(caption).not.toContain('student');
+    expect(caption).not.toContain('$');
+  });
+
+  test('converts LaTeX in the error fields too', () => {
+    const d = wrongDiagnosis();
+    d.what_went_wrong = 'You wrote $\\frac{-5}{4}$, but the step before gives $-5\\div 4$.';
+    d.correct_next_step = 'Check your step 3: $x=\\frac{-5}{4}$.';
+    const caption = diagnosisCaption(d);
+    expect(caption).toContain('You wrote -5/4, but the step before gives -5÷4.');
+    expect(caption).toContain('Try this instead: Check your step 3: x=-5/4.');
+    expect(caption).not.toContain('$');
+    expect(caption).not.toContain('\\');
+  });
+
   test('unreadable working gets the ask-for-a-better-photo reply', () => {
     const caption = diagnosisCaption(unreadableDiagnosis());
     expect(caption).toBe(
@@ -384,6 +431,24 @@ describe('diagnosisCaption', () => {
   });
 });
 
+describe('toSecondPerson', () => {
+  test('rewrites a leading possessive', () => {
+    expect(toSecondPerson("The student's final answers match.")).toBe('Your final answers match.');
+    expect(toSecondPerson("the student's answer is right")).toBe('Your answer is right');
+  });
+
+  test('leaves everything else alone', () => {
+    expect(toSecondPerson('The student wrote x = 6 in step 3.')).toBe(
+      'The student wrote x = 6 in step 3.',
+    );
+    expect(toSecondPerson('Check your step 3.')).toBe('Check your step 3.');
+    expect(toSecondPerson("Mid-sentence the student's sign slips.")).toBe(
+      "Mid-sentence the student's sign slips.",
+    );
+    expect(toSecondPerson('')).toBe('');
+  });
+});
+
 describe('diagnosisPracticeText', () => {
   test('numbers the questions and adds an answers block', () => {
     const text = diagnosisPracticeText(wrongDiagnosis());
@@ -400,6 +465,40 @@ describe('diagnosisPracticeText', () => {
         '3. x = 3.5.',
       ].join('\n'),
     );
+  });
+
+  test('converts LaTeX in questions and answers to plain phone text', () => {
+    const d = wrongDiagnosis();
+    d.practice = [
+      {
+        question: 'Solve $x^2+7x+10=0$ by factorising.',
+        answer: 'It factorises as $(x+2)(x+5)=0$, so $x=-2$ or $x=-5$.',
+      },
+      {
+        question: 'Differentiate $\\sin(3x)$.',
+        answer: 'The derivative is $3\\cos(3x)$.',
+      },
+      {
+        question: 'Solve $2x^2+5x-3=0$.',
+        answer: 'With $a=2$, $b=5$ and $c=-3$, $x=\\frac{-5\\pm\\sqrt{25+24}}{4}$, so $x=0.5$ or $x=-3$.',
+      },
+    ];
+    const text = diagnosisPracticeText(d) ?? '';
+    expect(text).toBe(
+      [
+        '3 to try:',
+        '1. Solve x²+7x+10=0 by factorising.',
+        '2. Differentiate sin(3x).',
+        '3. Solve 2x²+5x-3=0.',
+        '',
+        'Answers:',
+        '1. It factorises as (x+2)(x+5)=0, so x=-2 or x=-5.',
+        '2. The derivative is 3cos(3x).',
+        '3. With a=2, b=5 and c=-3, x=(-5±√(25+24))/4, so x=0.5 or x=-3.',
+      ].join('\n'),
+    );
+    expect(text).not.toContain('$');
+    expect(text).not.toContain('\\');
   });
 
   test('returns null when there is no practice', () => {

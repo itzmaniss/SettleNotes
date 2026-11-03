@@ -7,6 +7,7 @@
 import type { InputPart, MetaClient, Usage } from '@/lib/meta/client';
 import { annotateMathPhoto } from '@/lib/media/annotate';
 import { buildMathUserText, MATH_SYSTEM_PROMPT } from '@/lib/meta/prompts/math';
+import { toPlainMath } from '@/lib/text/plain-math';
 import { normalizeTopic } from './math-topics';
 import {
   MATH_TOPIC_LABELS,
@@ -121,6 +122,22 @@ function plain(text: string): string {
   return text.replace(/\u2014|\u2013/g, '-');
 }
 
+// Only a leading possessive is deterministically safe to rewrite: "The
+// student's final answers ..." becomes "Your final answers ...". A bare
+// "The student" needs a grammar fix no regex can make ("You is correct"),
+// so that stays with the prompt rule to prevent.
+export function toSecondPerson(text: string): string {
+  return text.replace(/^The student's\b/i, 'Your');
+}
+
+// The one safety funnel every model-written verdict line goes through on the
+// way OUT to the student: typographic dashes to plain hyphens, the leading
+// possessive to second person, and any LaTeX the model still emitted to
+// plain phone text. Stored rows are never touched by this.
+function studentSafe(text: string): string {
+  return toPlainMath(plain(toSecondPerson(text)));
+}
+
 export function diagnosisCaption(d: MathDiagnosis): string {
   if (d.steps.length === 0) {
     return "I couldn't read that working clearly. Could you send a sharper photo, with the page flat and well lit?";
@@ -128,20 +145,22 @@ export function diagnosisCaption(d: MathDiagnosis): string {
 
   let out: string;
   if (d.is_correct) {
-    out = `Every step checks out. ${d.final_answer_check}`.trim();
+    out = `Every step checks out. ${studentSafe(d.final_answer_check)}`.trim();
   } else {
     const lead =
       d.first_error_step != null
         ? `Step ${d.first_error_step} is where it slipped: ${d.what_went_wrong ?? ''}`
         : `This is where it slipped: ${d.what_went_wrong ?? ''}`;
-    const parts = [plain(lead.trim())];
+    const parts = [studentSafe(lead.trim())];
     if (d.misconception != null) {
       parts.push(
-        plain(`Why it matters: ${d.misconception.detail} (${MATH_TOPIC_LABELS[d.misconception.topic]})`).trim(),
+        studentSafe(
+          `Why it matters: ${d.misconception.detail} (${MATH_TOPIC_LABELS[d.misconception.topic]})`,
+        ).trim(),
       );
     }
     if (d.correct_next_step != null) {
-      parts.push(plain(`Try this instead: ${d.correct_next_step}`).trim());
+      parts.push(studentSafe(`Try this instead: ${d.correct_next_step}`).trim());
     }
     out = parts.join('\n\n');
   }
@@ -156,10 +175,10 @@ export function diagnosisCaption(d: MathDiagnosis): string {
 export function diagnosisPracticeText(d: MathDiagnosis): string | null {
   if (d.practice.length === 0) return null;
   const lines: string[] = [`${d.practice.length} to try:`];
-  d.practice.forEach((item, i) => lines.push(`${i + 1}. ${plain(item.question)}`));
+  d.practice.forEach((item, i) => lines.push(`${i + 1}. ${studentSafe(item.question)}`));
   lines.push('');
   lines.push('Answers:');
-  d.practice.forEach((item, i) => lines.push(`${i + 1}. ${plain(item.answer)}`));
+  d.practice.forEach((item, i) => lines.push(`${i + 1}. ${studentSafe(item.answer)}`));
   return lines.join('\n');
 }
 
