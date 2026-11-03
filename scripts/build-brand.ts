@@ -3,9 +3,10 @@
 //   bun run scripts/build-brand.ts
 //
 // Writes: app/favicon.ico (16/32/48 PNG-in-ICO), app/apple-icon.png (180),
-// public/brand/settle-icon-512.png, public/brand/settle-icon-1024.png.
-// All raster assets put the mark on opaque paper #F5F8EF with ~14 percent
-// padding, so Telegram and Stripe never see transparent edges.
+// public/brand/settle-icon-512.png, public/brand/settle-icon-1024.png, and
+// the 1200x630 share card public/opengraph-image.png referenced by the site
+// metadata. All raster assets put the mark on opaque paper #F5F8EF with
+// ~14 percent padding, so Telegram and Stripe never see transparent edges.
 //
 //   bun run scripts/build-brand.ts --preview
 //
@@ -21,6 +22,8 @@ const ROOT = join(import.meta.dir, "..");
 const MARK_SVG = readFileSync(join(ROOT, "public/brand/settle-mark.svg"));
 const FAVICON_SVG = readFileSync(join(ROOT, "app/icon.svg"));
 const PAPER = "#F5F8EF";
+const INK = "#12161F";
+const LILAC = "#B78CF2";
 
 const VIEWBOX = 512;
 
@@ -66,6 +69,34 @@ function buildIco(images: { size: number; data: Buffer }[]): Buffer {
   return Buffer.concat([header, ...images.map((image) => image.data)]);
 }
 
+// The 1200x630 share card for Open Graph and Twitter: paper background, the
+// mark on the left, the wordmark and tagline as SVG text that libvips
+// rasterises with the system sans-serif. The wordmark gets a hard lilac
+// offset shadow, the same trick as the mark's own ink drop, so the accent
+// doubles as the shadow. tests/seo/og-image.test.ts verifies the text really
+// rendered by checking pixel bounds, not by eye.
+async function buildOgImage(): Promise<void> {
+  const width = 1200;
+  const height = 630;
+  const textLayer = Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+      `<rect width="${width}" height="${height}" fill="${PAPER}"/>` +
+      // Shadow copy first, ink text on top: a hard offset, no blur.
+      `<text x="530" y="330" font-family="sans-serif" font-weight="800" font-size="190" letter-spacing="-6" fill="${LILAC}">Settle</text>` +
+      `<text x="518" y="318" font-family="sans-serif" font-weight="800" font-size="190" letter-spacing="-6" fill="${INK}">Settle</text>` +
+      `<text x="522" y="438" font-family="sans-serif" font-weight="600" font-size="44" letter-spacing="1" fill="${INK}">Your group chat, sorted.</text>` +
+      `</svg>`,
+  );
+  const markSize = 360;
+  const mark = await renderSvg(MARK_SVG, markSize);
+  await sharp(textLayer)
+    .composite([
+      { input: mark, top: Math.round((height - markSize) / 2), left: 96 },
+    ])
+    .png()
+    .toFile(join(ROOT, "public/opengraph-image.png"));
+}
+
 async function buildAssets() {
   const ico = buildIco(
     await Promise.all(
@@ -86,6 +117,7 @@ async function buildAssets() {
     join(ROOT, "public/brand/settle-icon-1024.png"),
     await paperIcon(MARK_SVG, 1024)
   );
+  await buildOgImage();
   console.log("brand assets written");
 }
 

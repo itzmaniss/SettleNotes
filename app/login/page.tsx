@@ -14,6 +14,8 @@ import {
 
 export const metadata: Metadata = {
   title: "Log in",
+  // Never useful in a search result, and a crawler has nothing to follow.
+  robots: { index: false, follow: false },
 };
 
 type LoginPageProps = {

@@ -5,7 +5,7 @@ import { EXPIRED_PAGE_BODY, EXPIRED_PAGE_HINT, EXPIRED_PAGE_TITLE } from "@/lib/
 
 export const metadata: Metadata = {
   title: "Link expired",
-  robots: { index: false },
+  robots: { index: false, follow: false },
 };
 
 export default function ExpiredPage() {

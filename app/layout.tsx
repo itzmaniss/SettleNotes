@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Caveat, Geist, Geist_Mono, Unbounded } from "next/font/google";
 import "katex/dist/katex.min.css";
 import "./globals.css";
+import { rootMetadata, rootViewport } from "@/lib/seo/metadata";
 
 const display = Unbounded({
   subsets: ["latin"],
@@ -29,14 +30,13 @@ const hand = Caveat({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: {
-    default: "Settle",
-    template: "%s | Settle",
-  },
-  description:
-    "Forward your group chat, PDFs and math photos to a Telegram bot. Settle turns them into one task list and starts each task for you.",
-};
+// The metadata object itself is built and tested in lib/seo/metadata.ts (this
+// file cannot be imported from bun test: the Google fonts need the Next
+// runtime). The raw APP_BASE_URL read matches components/marketing/links.ts,
+// so prerendering with no environment stays possible.
+export const metadata: Metadata = rootMetadata(process.env.APP_BASE_URL);
+
+export const viewport: Viewport = rootViewport;
 
 export default function RootLayout({
   children,

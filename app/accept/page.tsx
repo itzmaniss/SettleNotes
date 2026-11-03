@@ -13,7 +13,7 @@ import { ACCEPT_BODY, ACCEPT_CONFIRM, ACCEPT_DECLINE, ACCEPT_TITLE } from "@/lib
 
 export const metadata: Metadata = {
   title: "One quick step",
-  robots: { index: false },
+  robots: { index: false, follow: false },
 };
 
 type AcceptPageProps = {

@@ -6,24 +6,21 @@ import { Bento } from "@/components/marketing/bento";
 import { Pricing } from "@/components/marketing/pricing";
 import { LoopCta } from "@/components/marketing/loop-cta";
 import { Footer } from "@/components/marketing/footer";
+import { buildLandingJsonld, toJsonLdScript } from "@/lib/seo/jsonld";
+import { landingMetadata } from "@/lib/seo/metadata";
+import { siteUrl } from "@/lib/seo/site";
 
-const title = "Settle: your group chat, sorted";
-const description =
-  "Forward your group chat, PDFs and math photos to the Settle Telegram bot. Settle turns them into one task list, and every task arrives with its first step already done.";
-
-export const metadata: Metadata = {
-  title: { absolute: title },
-  description,
-  openGraph: {
-    title,
-    description,
-    type: "website",
-  },
-};
+// The raw APP_BASE_URL read matches components/marketing/links.ts: the page
+// prerenders with no environment and siteUrl falls back to the production
+// origin, so the canonical address and the cards never depend on env at
+// request time.
+export const metadata: Metadata = landingMetadata(process.env.APP_BASE_URL);
 
 export default function Home() {
+  const jsonld = toJsonLdScript(buildLandingJsonld(siteUrl(process.env.APP_BASE_URL)));
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonld }} />
       <Nav />
       <main>
         <Hero />

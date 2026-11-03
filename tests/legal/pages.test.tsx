@@ -43,7 +43,7 @@ type PageEntry = {
   name: string;
   key: LegalKey;
   page: () => Promise<React.ReactElement> | React.ReactElement;
-  metadata: Metadata;
+  generateMetadata: () => Promise<Metadata>;
   dynamic: string;
 };
 
@@ -52,34 +52,38 @@ const pages: PageEntry[] = [
     name: "terms",
     key: "terms",
     page: termsModule.default,
-    metadata: termsModule.metadata,
+    generateMetadata: termsModule.generateMetadata,
     dynamic: termsModule.dynamic,
   },
   {
     name: "privacy",
     key: "privacy",
     page: privacyModule.default,
-    metadata: privacyModule.metadata,
+    generateMetadata: privacyModule.generateMetadata,
     dynamic: privacyModule.dynamic,
   },
   {
     name: "refund",
     key: "refund",
     page: refundModule.default,
-    metadata: refundModule.metadata,
+    generateMetadata: refundModule.generateMetadata,
     dynamic: refundModule.dynamic,
   },
 ];
 
 describe("legal page metadata", () => {
   test.each([["terms", "Terms"], ["privacy", "Privacy"], ["refund", "Refunds"]])(
-    "%s has the plain title and a description, and stays indexable",
-    (key, title) => {
+    "%s has the plain title, a description, its own canonical and indexes while clean",
+    async (key, title) => {
       const entry = pages.find((page) => page.name === key)!;
-      expect(entry.metadata.title).toBe(title);
-      expect(entry.metadata.description?.length ?? 0).toBeGreaterThan(10);
-      // No robots block anywhere: the pages are meant for search engines.
-      expect(entry.metadata.robots).toBeUndefined();
+      const meta = await entry.generateMetadata();
+      expect(meta.title).toBe(title);
+      expect(meta.description?.length ?? 0).toBeGreaterThan(10);
+      expect(meta.alternates).toEqual({ canonical: `/${key}` });
+      // The check env fills every token, so the documents are clean and the
+      // pages are meant for search engines. A marker flips this to noindex,
+      // see lib/seo/robots.ts and tests/seo/robots-sitemap.test.ts.
+      expect(meta.robots).toEqual({ index: true, follow: true });
     },
   );
 

@@ -503,6 +503,7 @@ The full gate: `bun run typecheck && bun run lint && bun test && bun run build`.
 | [docs/LAUNCH.md](docs/LAUNCH.md) | Public launch checklist with owner tags, in order. |
 | [docs/INCIDENT.md](docs/INCIDENT.md) | Incident runbook: contain, rotate, preserve evidence, notify. |
 | [docs/DATA-MAP.md](docs/DATA-MAP.md) | Where every kind of student data lives and how it is removed. |
+| [docs/SEO.md](docs/SEO.md) | Search basics: canonical, sharing cards with a preview image, robots.txt, sitemap, JSON-LD, and the Google and Bing submission steps. |
 | [docs/PROGRESS.md](docs/PROGRESS.md) | Build log, newest first, with checkpoints and decisions. |
 | [docs/TASKS.md](docs/TASKS.md) | Self-contained task cards used to build the project. |
 | [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md) | Project management notes for the build process. |
