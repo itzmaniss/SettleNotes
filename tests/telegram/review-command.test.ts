@@ -39,13 +39,13 @@ describe("createReviewCommand", () => {
       getUserByTelegramId: async () => USER,
       start: async (userId) => {
         started.push(userId);
-        return { kind: "started", message: "Let us practise sign errors. Question 1 of 3:" };
+        return { kind: "started", message: "Let us practise a few questions like the one you slipped on. Question 1 of 3:" };
       },
     });
     const { ctx, replies } = fakeCtx();
     await command(ctx);
     expect(started).toEqual(["user-1"]);
-    expect(replies).toEqual(["Let us practise sign errors. Question 1 of 3:"]);
+    expect(replies).toEqual(["Let us practise a few questions like the one you slipped on. Question 1 of 3:"]);
   });
 
   test("no review waiting answers with the friendly line", async () => {

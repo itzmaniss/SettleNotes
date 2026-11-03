@@ -105,7 +105,9 @@ describe("startReviewQuiz", () => {
     const outcome = await startReviewQuiz(deps, "user-1");
     expect(outcome.kind).toBe("started");
     if (outcome.kind === "started") {
-      expect(outcome.message).toBe("Let us practise sign errors. Question 1 of 3:\n\n7 - 3 = ?");
+      expect(outcome.message).toBe(
+        "Let us practise a few questions like the one you slipped on. Question 1 of 3:\n\n7 - 3 = ?",
+      );
     }
     expect(calls.loadQuestions).toHaveLength(1);
     expect(calls.loadQuestions[0]).toMatchObject({
@@ -177,6 +179,47 @@ describe("startReviewQuiz", () => {
     const { deps } = makeHarness({ loadQuestions: async () => [] });
     const outcome = await startReviewQuiz(deps, "user-1");
     expect(outcome.kind).toBe("setup_failed");
+  });
+});
+
+// Stored questions and model feedback can still arrive with caret maths (the
+// prompts allow x^2 style), so the outgoing messages must show superscripts.
+describe("outgoing quiz text is plain maths", () => {
+  const MATHS_QUESTIONS = [
+    { question: "Solve x^2 - 7x + 12 = 0.", answer: "3 and 4" },
+    { question: "Expand (x + 1)^2.", answer: "x^2 + 2x + 1" },
+  ];
+
+  test("the intro and the stored question go out as x², with no caret", async () => {
+    const { deps } = makeHarness({ loadQuestions: async () => MATHS_QUESTIONS });
+    const outcome = await startReviewQuiz(deps, "user-1");
+    expect(outcome.kind).toBe("started");
+    if (outcome.kind === "started") {
+      expect(outcome.message).toBe(
+        "Let us practise a few questions like the one you slipped on. Question 1 of 2:\n\nSolve x² - 7x + 12 = 0.",
+      );
+      expect(outcome.message).toContain("x²");
+      expect(outcome.message).not.toContain("^");
+    }
+  });
+
+  test("between question feedback and the next question convert too", async () => {
+    const { deps } = makeHarness({
+      loadQuestions: async () => MATHS_QUESTIONS,
+      checkAnswer: async () => ({
+        verdict: "correct",
+        feedback: "Correct. Now try (x + 1)^2.",
+      }),
+    });
+    await startReviewQuiz(deps, "user-1");
+    const outcome = await answerReviewQuiz(deps, "user-1", "3 and 4");
+    expect(outcome.kind).toBe("answered");
+    if (outcome.kind === "answered") {
+      expect(outcome.message).toBe(
+        "Correct. Now try (x + 1)².\n\nQuestion 2 of 2:\n\nExpand (x + 1)².",
+      );
+      expect(outcome.message).not.toContain("^");
+    }
   });
 });
 

@@ -14,6 +14,7 @@ import type {
 } from "@/lib/db/queries";
 import type { TaskRow, WeakSpotRow } from "@/lib/db/types";
 import { listOpenTasks as realListOpenTasks } from "@/lib/db/queries";
+import { toPlainMath } from "@/lib/text/plain-math";
 import { getWeakSpotById } from "./queries";
 import {
   MATH_TOPIC_LABELS,
@@ -67,11 +68,13 @@ export function reviewStoppedReply(): string {
   return "No problem, we can pick this up any time with /review.";
 }
 
-// 'Sign errors' reads badly after "practise", so the label goes lower case
-// first; unknown topics fall back to the stored string.
-export function reviewTopicWords(topic: string): string {
-  const label = MATH_TOPIC_LABELS[topic as MathTopic] ?? topic;
-  return label.charAt(0).toLowerCase() + label.slice(1);
+// The single plain maths pass over the quiz's outgoing text. Stored questions
+// and model feedback can still arrive with caret maths (x^2) or LaTeX that a
+// phone chat shows literally, so every assembled message converts here and
+// nowhere else: nothing stored in the session is ever rewritten, and the
+// fixed copy lines below hold no maths so they skip the pass entirely.
+function outgoingQuizText(text: string): string {
+  return toPlainMath(text);
 }
 
 export function reviewTaskTitle(topic: string): string {
@@ -82,12 +85,13 @@ export function questionLine(index: number, total: number): string {
   return `Question ${index + 1} of ${total}:`;
 }
 
-export function reviewStartMessageFor(
-  topic: string,
-  question: string,
-  total: number,
-): string {
-  return `Let us practise ${reviewTopicWords(topic)}. ${questionLine(0, total)}\n\n${question}`;
+// The intro never names the topic: the taxonomy ids (and even the labels, like
+// "Other" or "Chain rule") do not read naturally after "practise", so the
+// message just points back at the question the student slipped on.
+export function reviewStartMessageFor(question: string, total: number): string {
+  return outgoingQuizText(
+    `Let us practise a few questions like the one you slipped on. ${questionLine(0, total)}\n\n${question}`,
+  );
 }
 
 export function reviewNextMessage(
@@ -96,11 +100,11 @@ export function reviewNextMessage(
   index: number,
   total: number,
 ): string {
-  return `${feedback}\n\n${questionLine(index, total)}\n\n${question}`;
+  return outgoingQuizText(`${feedback}\n\n${questionLine(index, total)}\n\n${question}`);
 }
 
 export function reviewSkipMessage(question: string, index: number, total: number): string {
-  return `${questionLine(index, total)}\n\n${question}`;
+  return outgoingQuizText(`${questionLine(index, total)}\n\n${question}`);
 }
 
 // One encouraging plain sentence after the count, never a lecture.
@@ -108,7 +112,7 @@ export function reviewFinishMessage(right: number, total: number): string {
   let tail = "I will bring this back soon so it sticks.";
   if (total > 0 && right === total) tail = "Nice, that one is sticking.";
   else if (right >= 2) tail = "Good, most of it stuck.";
-  return `${right} of ${total} right. ${tail}`;
+  return outgoingQuizText(`${right} of ${total} right. ${tail}`);
 }
 
 // ---- outcomes ----------------------------------------------------------------
@@ -180,7 +184,6 @@ export async function startReviewQuiz(
   return {
     kind: "started",
     message: reviewStartMessageFor(
-      session.topic,
       session.questions[0].question,
       session.questions.length,
     ),
