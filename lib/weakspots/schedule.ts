@@ -51,6 +51,25 @@ export function scheduleReview(occurrences: number, now: Date): ReviewSchedule {
   };
 }
 
+// ---- quiz outcome scheduling -------------------------------------------------
+
+// After a quiz went well (2 or more right) the slip has stuck for now, so the
+// weak spot's next review moves a full week out. The due moment is the same
+// end of a SGT day as every other review due date.
+export const QUIZ_SUCCESS_GAP_DAYS = 7;
+
+export type QuizSuccessSchedule = { dueAt: string };
+
+// Pure helper used by the review quiz flow when the student does well. It
+// does not touch occurrences: only a new diagnosis may bump that counter.
+export function scheduleReviewAfterQuizSuccess(now: Date): QuizSuccessSchedule {
+  const dueMs =
+    (sgtDayIndex(now) + QUIZ_SUCCESS_GAP_DAYS) * DAY_MS -
+    SGT_OFFSET_MS +
+    (REVIEW_SPACING.dueHourSgt * 60 + REVIEW_SPACING.dueMinuteSgt) * 60 * 1000;
+  return { dueAt: new Date(dueMs).toISOString() };
+}
+
 // 'tomorrow' when the due SGT date is the next SGT day, else the short
 // weekday ('Fri'). Empty string for unparseable input.
 export function reviewDayWord(dueAtIso: string, now: Date): string {

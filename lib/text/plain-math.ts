@@ -302,6 +302,18 @@ function convertSites(text: string): string {
   return out;
 }
 
+// Bare carets in ordinary prose: x^2, 2^10, (x+1)^2 become superscripts even
+// with no LaTeX delimiters anywhere. One or two digits only, and the caret
+// must sit right after a letter, digit or closing bracket, so "^2 hi", a
+// price range or the fallback ^(n+1) style is never touched. Superscript
+// output holds no caret, so a second pass finds nothing and stops.
+function bareCaretSuperscripts(text: string): string {
+  return text.replace(
+    /([a-zA-Z0-9)\]])\^([0-9]{1,2})(?![0-9])/g,
+    (_m, prev: string, exp: string) => prev + superscriptOf(exp),
+  );
+}
+
 function tidyWhitespace(text: string): string {
   return text
     .replace(/[ \t]{2,}/g, " ")
@@ -324,6 +336,7 @@ export function toPlainMath(text: string): string {
     // sentence) converts as well: backslash commands only ever come from
     // maths, so their presence switches the whole string into maths mode.
     if (/\\[a-zA-Z]|\\\\/.test(converted)) converted = convertLatex(converted);
+    converted = bareCaretSuperscripts(converted);
     converted = tidyWhitespace(converted);
     if (converted.length > text.length * MAX_GROWTH_FACTOR + MAX_GROWTH_SLACK) {
       return tidyWhitespace(text);

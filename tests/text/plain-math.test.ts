@@ -85,17 +85,27 @@ const TABLE: Array<[string, string]> = [
     "With $a=2$, $b=5$ and $c=-3$, $x=\\frac{-5\\pm\\sqrt{25+24}}{4}$, so $x=0.5$ or $x=-3$.",
     "With a=2, b=5 and c=-3, x=(-5±√(25+24))/4, so x=0.5 or x=-3.",
   ],
+  // Bare carets in prose with no LaTeX delimiters at all.
+  ["x^2+4x-5=0", "x²+4x-5=0"],
+  ["2^10 is the answer", "2¹⁰ is the answer"],
+  ["Expand (x+1)^2 first", "Expand (x+1)² first"],
+  ["Simplify a^3 b^2", "Simplify a³ b²"],
+  ["It grows by 5^12", "It grows by 5¹²"],
+  ["x^2 stays as it is in prose", "x² stays as it is in prose"],
+  ["a_b and c^3 in plain text are fine", "a_b and c³ in plain text are fine"],
 ];
 
-// Prices and ordinary dollar text are never treated as maths.
+// Prices and ordinary dollar text are never treated as maths. An unattached
+// caret and a three digit exponent also stay put.
 const UNTOUCHED: string[] = [
   "S$7.99",
   "It costs $5 and $10 in total.",
   "Pro is 5 Stars a month.",
   "I paid $5, she paid $10.",
   "Send $5 to school tomorrow",
-  "x^2 stays as it is in prose",
-  "a_b and c^3 in plain text are fine",
+  "^2 is a caret at the start",
+  "power of 123 stays: x^123",
+  "a_b and c_(n+1) in plain text are fine",
   "The answer is x = 4, full stop.",
   "no maths here at all",
   "",

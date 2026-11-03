@@ -45,12 +45,22 @@ import {
   pdfTruncatedNote,
   pdfUnreadableReply,
   practiceMessage,
+  quizRateLimitedReply,
   rateLimitReply,
+  startReviewKeyboard,
   summaryReply,
   unknownCommandReply,
   unsupportedFileReply,
   voiceTooLongReply,
 } from "@/lib/telegram/replies";
+import {
+  answerReviewQuiz,
+  createReviewFlowDeps,
+  recentRecordedReviewTask,
+  startReviewQuiz,
+} from "@/lib/weakspots/review-flow";
+import type { ReviewAnswerOutcome, ReviewStartOutcome } from "@/lib/weakspots/review-flow";
+import { reviewQuizStore } from "@/lib/weakspots/review-quiz";
 
 // Minimal structural view of a grammY context, so handler tests can pass tiny
 // fakes instead of building a real Bot. `me` is the bot's own user (getMe),
@@ -110,11 +120,15 @@ export type HandlerDeps = {
   // Short term conversation memory. Optional so tests can inject a fresh one;
   // defaults to the module level instance (in memory only, never persisted).
   conversation?: ConversationMemory;
+  // The review quiz seam. Optional so tests and every non-quiz path behave
+  // exactly as before; the real one is built lazily in createHandlerDeps.
+  review?: ReviewQuizIntercept;
 };
 
 export function createHandlerDeps(): HandlerDeps {
   let realTranscriber: Transcriber | undefined;
   let rateLimiter: ReturnType<typeof createRateLimiter> | undefined;
+  let reviewIntercept: ReviewQuizIntercept | undefined;
   const deps: HandlerDeps = {
     upsertUser,
     createUpload,
@@ -147,6 +161,16 @@ export function createHandlerDeps(): HandlerDeps {
       }));
       return (userId) => limiter.check(userId);
     },
+    get review(): ReviewQuizIntercept {
+      reviewIntercept ??= createRealReviewQuizIntercept({
+        upsertUser: deps.upsertUser,
+        ...(deps.checkRateLimit ? { checkRateLimit: deps.checkRateLimit } : {}),
+        get botToken() {
+          return env.TELEGRAM_BOT_TOKEN;
+        },
+      });
+      return reviewIntercept;
+    },
   };
   return deps;
 }
@@ -157,11 +181,157 @@ export const KNOWN_COMMANDS = new Set([
   "/dashboard",
   "/tasks",
   "/done",
+  "/review",
   "/pro",
   "/paysupport",
 ]);
 const DEFAULT_TYPING_INTERVAL_MS = 4_000;
 const MAX_STORED_ERROR_LENGTH = 300;
+
+// ---- starting the quiz from plain words ---------------------------------------
+
+// The exact short phrases a student types to start the review quiz. Matched
+// case-insensitively against the trimmed message with trailing punctuation
+// and collapsed spaces; anything longer than 60 characters never matches, so
+// a sentence like "what is a review about?" reaches the normal pipeline.
+export const REVIEW_PHRASES = [
+  "do the review",
+  "start the review",
+  "review now",
+  "can we do the review now",
+  "quiz me",
+] as const;
+
+const REVIEW_PHRASE_MAX_CHARS = 60;
+
+export function matchesReviewPhrase(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length === 0 || trimmed.length >= REVIEW_PHRASE_MAX_CHARS) return false;
+  const cleaned = trimmed
+    .toLowerCase()
+    .replace(/[.!?,;:]+$/, "")
+    .replace(/\s+/g, " ");
+  return (REVIEW_PHRASES as readonly string[]).includes(cleaned);
+}
+
+// The quiz half of the text handler: answers an in-flight session and starts
+// a quiz when a phrase matches. Injected as deps.review so tests can leave it
+// out and the handler behaves exactly as before.
+export type ReviewQuizIntercept = {
+  // True when the message was consumed by the quiz (started or answered);
+  // false hands the message back to the normal pipeline.
+  interceptText: (ctx: BotContextLike) => Promise<boolean>;
+};
+
+export type ReviewQuizInterceptDeps = {
+  upsertUser: (i: UpsertUserInput) => Promise<UserRow>;
+  start: (userId: string) => Promise<ReviewStartOutcome>;
+  answer: (userId: string, text: string) => Promise<ReviewAnswerOutcome>;
+  hasSession: (userId: string) => boolean;
+  checkRateLimit?: RateLimitCheck;
+  botToken: string;
+};
+
+// Exported so tests can build the real intercept with fakes; the production
+// wiring goes through createRealReviewQuizIntercept.
+export function createReviewQuizIntercept(deps: ReviewQuizInterceptDeps): ReviewQuizIntercept {
+  // Same funnel as replySafely: linked to the incoming message, never throws.
+  async function replySafely(ctx: BotContextLike, text: string): Promise<void> {
+    const options = replyParamsFor(ctx.message);
+    try {
+      await ctx.reply(text, options);
+    } catch (error) {
+      console.error(
+        "[telegram] reply failed:",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  // Refused means one friendly line and no AI call; a failing lookup fails
+  // open exactly like the ingest gate.
+  async function passQuizGate(ctx: BotContextLike, userId: string): Promise<boolean> {
+    const check = deps.checkRateLimit;
+    if (check === undefined) return true;
+    let verdict;
+    try {
+      verdict = await check(userId);
+    } catch (error) {
+      console.error(
+        "[telegram] rate limit lookup failed, letting the quiz through:",
+        messageOf(error, deps.botToken),
+      );
+      return true;
+    }
+    if (verdict.allowed) return true;
+    await replySafely(ctx, quizRateLimitedReply(verdict));
+    return false;
+  }
+
+  return {
+    async interceptText(ctx: BotContextLike): Promise<boolean> {
+      if (ctx.from === undefined) return false;
+      const text = ctx.message?.text ?? "";
+      // Commands work normally during a session: the command middleware sees
+      // them first, and anything left here starting with "/" stays with the
+      // command branch of handleTextMessage. A message with no text at all is
+      // never an answer.
+      if (text.startsWith("/") || text.trim() === "") return false;
+
+      const phrase = matchesReviewPhrase(text);
+      const user = await deps.upsertUser({
+        telegramUserId: ctx.from.id,
+        telegramChatId: ctx.chat?.id ?? ctx.from.id,
+        firstName: ctx.from.first_name ?? null,
+      });
+
+      if (!phrase && !deps.hasSession(user.id)) return false;
+
+      if (phrase) {
+        if (!(await passQuizGate(ctx, user.id))) return true;
+        const outcome = await deps.start(user.id);
+        await replySafely(ctx, outcome.message);
+        return true;
+      }
+
+      if (!(await passQuizGate(ctx, user.id))) return true;
+      const outcome = await deps.answer(user.id, text);
+      // The session died between the check and the answer (expiry): the
+      // message belongs to the normal pipeline after all.
+      if (outcome.kind === "no_session") return false;
+      if (outcome.kind === "check_failed") {
+        // Logged without stacks or secrets; the session stays alive, so the
+        // student just sends the answer again.
+        console.error(
+          "[telegram] review answer check failed:",
+          messageOf(outcome.cause, deps.botToken),
+        );
+        await replySafely(
+          ctx,
+          outcome.cause instanceof BudgetExceededError ? budgetReply() : aiBusyReply(),
+        );
+        return true;
+      }
+      await replySafely(ctx, outcome.message);
+      return true;
+    },
+  };
+}
+
+// Real intercept bound at call time: the flow resolves its own db wrappers
+// and model client lazily, so importing handlers.ts never touches either.
+function createRealReviewQuizIntercept(inner: {
+  upsertUser: (i: UpsertUserInput) => Promise<UserRow>;
+  checkRateLimit?: RateLimitCheck;
+  botToken: string;
+}): ReviewQuizIntercept {
+  return createReviewQuizIntercept({
+    ...inner,
+    start: (userId) => startReviewQuiz(createReviewFlowDeps(), userId),
+    answer: (userId, text) => answerReviewQuiz(createReviewFlowDeps(), userId, text),
+    hasSession: (userId) => reviewQuizStore.get(userId) != null,
+  });
+}
 
 type MessageSpec = {
   kind: UploadKind;
@@ -191,6 +361,10 @@ export async function handleTextMessage(ctx: BotContextLike, deps: HandlerDeps):
     await replySafely(ctx, unknownCommandReply());
     return;
   }
+  // The review quiz sits between commands and the pipeline: a short phrase
+  // starts it, and while a session is live the student's next text is the
+  // answer to the current question. Everything else falls through untouched.
+  if (deps.review !== undefined && (await deps.review.interceptText(ctx))) return;
   await processMessage(ctx, deps, { kind: "text", text });
 }
 
@@ -308,7 +482,7 @@ export async function handleVoiceMessage(ctx: BotContextLike, deps: HandlerDeps)
     }
 
     if (outcome.kind === "math") {
-      await sendMathOutcome(ctx, { ...outcome, caption: withHeard(heard, outcome.caption) }, deps.botToken);
+      await sendMathOutcome(ctx, { ...outcome, caption: withHeard(heard, outcome.caption) }, deps.botToken, user.id);
       return;
     }
     if (outcome.kind === "quota") {
@@ -511,7 +685,7 @@ async function processMessage(ctx: BotContextLike, deps: HandlerDeps, spec: Mess
     }
 
     if (outcome.kind === "math") {
-      await sendMathOutcome(ctx, outcome, deps.botToken);
+      await sendMathOutcome(ctx, outcome, deps.botToken, user.id);
       return;
     }
     if (outcome.kind === "quota") {
@@ -576,11 +750,14 @@ async function processMessage(ctx: BotContextLike, deps: HandlerDeps, spec: Mess
 // Math reply: the annotated photo (or the caption as text when there is
 // nothing to circle), then the practice questions, then any extra note from
 // the weak-spot hook. A failed photo send falls back to the caption as text
-// so the student still gets the diagnosis.
+// so the student still gets the diagnosis. The review line carries the Start
+// review button when the weak-spot hook just recorded a review task (in
+// memory only; a miss sends the plain line, the student can still /review).
 async function sendMathOutcome(
   ctx: BotContextLike,
   outcome: Extract<IngestOutcome, { kind: "math" }>,
   botToken: string,
+  userId: string,
 ): Promise<void> {
   if (outcome.annotated != null) {
     try {
@@ -597,7 +774,11 @@ async function sendMathOutcome(
     await replySafely(ctx, outcome.caption);
   }
   if (outcome.practiceText != null) await sendPracticeSet(ctx, outcome.practiceText, botToken);
-  if (outcome.extra != null) await replySafely(ctx, outcome.extra);
+  if (outcome.extra != null) {
+    const reviewTaskId = recentRecordedReviewTask(userId);
+    const keyboard = reviewTaskId != null ? startReviewKeyboard(reviewTaskId) : undefined;
+    await replySafely(ctx, outcome.extra, keyboard ? { reply_markup: keyboard } : undefined);
+  }
 }
 
 // The practice set goes out as Telegram HTML with the answers block behind a

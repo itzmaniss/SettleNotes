@@ -2,7 +2,7 @@
 // text (no parse_mode), so nothing ever needs escaping. No em or en dashes
 // anywhere in this file: students read every string here.
 import { InlineKeyboard } from "grammy";
-import { RATE_LIMIT } from "@/lib/telegram/limits";
+import { RATE_LIMIT, type RateLimitWindow } from "@/lib/telegram/limits";
 import { REFUND_WINDOW_DAYS } from "@/lib/billing/stars";
 import {
   PURCHASE_CONFIRM_BODY,
@@ -122,7 +122,7 @@ export function summaryReply(outcome: SummaryOutcome): string {
 }
 
 export function nothingFoundReply(): string {
-  return "I read that, but I could not find any tasks in it. Send me something with a deadline and I will add it for you.";
+  return "I read that, but I could not find any tasks in it. Send me something with a deadline and I will add it for you. You can also send /tasks to see what is due, or /review to practise a weak spot.";
 }
 
 export function mathPendingReply(): string {
@@ -375,6 +375,32 @@ export const PRE_CHECKOUT_CLOSED_REPLY =
 
 export function preCheckoutErrorReply(): string {
   return "I could not check this purchase in time, so it was stopped. You have not been charged. Please send /pro again in a moment.";
+}
+
+// ---- Review quiz: the Start review button on the review reply ----------------
+// Telegram caps callback data at 64 bytes; the prefix plus one uuid sits well
+// under that, and the pattern keeps taps meant for other bots out.
+
+export const REVIEW_START_CALLBACK_DATA_PATTERN = /^rv:start:([0-9a-f-]{36})$/;
+export const REVIEW_START_BUTTON_TEXT = "Start review";
+
+export function reviewStartCallbackData(reviewTaskId: string): string {
+  return `rv:start:${reviewTaskId}`;
+}
+
+export function startReviewKeyboard(reviewTaskId: string): InlineKeyboard {
+  return new InlineKeyboard().text(REVIEW_START_BUTTON_TEXT, reviewStartCallbackData(reviewTaskId));
+}
+
+// The rate limit refusal for a quiz action, mapped the same way as the
+// ingest gate: the minute limit gets the short retry line, the daily cap the
+// pause-for-today one.
+export function quizRateLimitedReply(outcome: {
+  allowed: false;
+  retryAfterSeconds: number;
+  window?: RateLimitWindow;
+}): string {
+  return outcome.window === "day" ? dailyCapReply() : rateLimitReply(outcome.retryAfterSeconds);
 }
 
 // ---- Low-confidence clarifications: one prompt message with Yes/No buttons,

@@ -22,6 +22,7 @@ import {
 import type { StarterRow, TaskRow, UserRow, WeakSpotRow } from "@/lib/db/types";
 import { MATH_TOPIC_LABELS, ReviewPracticeSchema, type MathDiagnosis } from "@/lib/starters/types";
 import { findOpenReviewTask as realFindOpenReviewTask, setWeakSpotNextReview as realSetWeakSpotNextReview } from "./queries";
+import { rememberRecordedReviewTask } from "./review-flow";
 import { reviewReply, scheduleReview } from "./schedule";
 
 export type WeakSpotRecorderDeps = {
@@ -98,6 +99,9 @@ export async function recordWeakSpot(
     });
     reviewTaskId = created.id;
   }
+  // The telegram layer reads this moments later to attach the Start review
+  // button to the reply below. In memory only, gone on restart.
+  rememberRecordedReviewTask(user.id, reviewTaskId);
 
   // A fresh practice set every time, so the review task always reflects the
   // latest diagnosis. No practice means no starter, the task still stands.

@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import sharp from 'sharp';
-import { GRID_SIZE, MIN_SIDE_PX, annotateMathPhoto, mapBboxToPixels } from '../../lib/media/annotate';
+import {
+  GRID_SIZE,
+  MIN_SIDE_PX,
+  annotateMathPhoto,
+  badgeSize,
+  mapBboxToPixels,
+  placeBadge,
+} from '../../lib/media/annotate';
 import type { Bbox } from '../../lib/starters/types';
 
 async function solidImage(width: number, height: number, rgb: [number, number, number]): Promise<Buffer> {
@@ -181,7 +188,58 @@ describe('annotateMathPhoto', () => {
     });
     const img = await rawPixels(out);
     // Box top maps to y=0, ring top clamps to stroke half, so the badge cannot
-    // fit above: it lands just below the ring bottom at (24, 50), 18x22.
-    expect(hasRedNear(img, 33, 61, 3)).toBe(true);
+    // fit above: it lands just below the ring bottom at (24, 52), 28.8x35.2.
+    expect(hasRedNear(img, 38, 70, 3)).toBe(true);
+  });
+
+  test('badge is about 60 percent bigger than the original 2px unit', () => {
+    // Old sizes at BADGE_UNIT 2: one digit 18x22, two digits 34x22.
+    expect(badgeSize(3).width).toBeCloseTo(28.8, 5);
+    expect(badgeSize(3).height).toBeCloseTo(35.2, 5);
+    expect(badgeSize(12).width).toBeCloseTo(48, 5);
+    expect(badgeSize(12).height).toBeCloseTo(35.2, 5);
+    expect(badgeSize(3).width / 18).toBeCloseTo(1.6, 5);
+    expect(badgeSize(3).height / 22).toBeCloseTo(1.6, 5);
+  });
+
+  test('placeBadge keeps the badge inside small images', () => {
+    // Above the ring when there is headroom, below when there is not.
+    const above = placeBadge(3, { left: 40, top: 80, bottom: 120 }, 300, 200);
+    expect(above).toEqual({ left: 40, top: 38.8 });
+    const below = placeBadge(3, { left: 40, top: 2, bottom: 46 }, 300, 200);
+    expect(below).toEqual({ left: 40, top: 52 });
+
+    // Every placement on small images stays within the pixel bounds whenever
+    // the image is at least badge sized.
+    const badge = badgeSize(7);
+    for (const [width, height] of [[300, 200], [200, 100], [120, 90], [100, 80]]) {
+      for (const ringTop of [2, 10, 40]) {
+        for (const ringBottom of [ringTop + 8, height - 2]) {
+          const { left, top } = placeBadge(7, { left: 5, top: ringTop, bottom: ringBottom }, width, height);
+          expect(left).toBeGreaterThanOrEqual(0);
+          expect(left + badge.width).toBeLessThanOrEqual(width);
+          expect(top).toBeGreaterThanOrEqual(0);
+          expect(top + badge.height).toBeLessThanOrEqual(height);
+        }
+      }
+    }
+  });
+
+  test('a corner box on a small image still keeps the badge visible', async () => {
+    const source = await solidImage(120, 90, SRC);
+    const out = await annotateMathPhoto({
+      buffer: source,
+      width: 120,
+      height: 90,
+      bbox: { x1: 800, y1: 800, x2: 1000, y2: 1000 },
+      stepNumber: 1,
+    });
+    const meta = await sharp(out).metadata();
+    expect(meta.width).toBe(120);
+    expect(meta.height).toBe(90);
+    const img = await rawPixels(out);
+    // Box lands near the bottom-right; the ring corner must stay visible, and
+    // the badge fits in the space above the ring without covering the box.
+    expect(hasRedNear(img, 116, 89, 4)).toBe(true);
   });
 });

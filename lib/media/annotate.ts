@@ -13,8 +13,10 @@ export const MIN_SIDE_PX = 8;
 const PAD_PX = 6; // ring padding outside the step box
 const RING_COLOR = '#e5484d';
 const BADGE_TEXT_COLOR = '#ffffff';
-const BADGE_UNIT = 2; // px per glyph grid unit (glyphs live on a 5x7 grid)
-const BADGE_GAP_PX = 4;
+// px per glyph grid unit (glyphs live on a 5x7 grid). 1.6x the original 2 so
+// the badge reads about 60 percent bigger on a phone screen.
+const BADGE_UNIT = 3.2;
+const BADGE_GAP_PX = 6;
 
 export type PixelRect = { left: number; top: number; width: number; height: number };
 
@@ -60,11 +62,31 @@ const DIGIT_STROKES: Record<string, number[][][]> = {
   '9': [[[4, 3], [0, 3], [0, 0], [4, 0], [4, 6], [0, 6]]],
 };
 
-function badgeSize(stepNumber: number): { width: number; height: number } {
+export function badgeSize(stepNumber: number): { width: number; height: number } {
   const digits = Math.max(0, Math.trunc(stepNumber)).toString().slice(0, 2).length;
   const u = BADGE_UNIT;
   // Per digit: 5 unit glyph plus a 1 unit gap; then a 2 unit pad on each side.
   return { width: digits * 6 * u - u + 4 * u, height: 7 * u + 4 * u };
+}
+
+// Where the badge sits for a given ring: above it when that fits, otherwise
+// below it, clamped flush to the image edge. Both edges always end inside the
+// image whenever the image is at least badge sized; on a smaller image the
+// badge anchors at 0 and clips, because nothing bigger can fit at all.
+export function placeBadge(
+  stepNumber: number,
+  ring: { left: number; top: number; bottom: number },
+  width: number,
+  height: number,
+): { left: number; top: number } {
+  const badge = badgeSize(stepNumber);
+  const aboveTop = ring.top - BADGE_GAP_PX - badge.height;
+  const top =
+    aboveTop >= 0
+      ? aboveTop
+      : Math.min(ring.bottom + BADGE_GAP_PX, Math.max(0, height - badge.height));
+  const left = clamp(ring.left, 0, Math.max(0, width - badge.width));
+  return { left, top };
 }
 
 // Renders the filled badge with stroke-path digits, positioned at (left, top).
@@ -119,13 +141,7 @@ export async function annotateMathPhoto(args: AnnotateMathPhotoArgs): Promise<Bu
   const radius = Math.min(12, Math.floor(Math.min(ringWidth, ringHeight) / 4));
 
   // Badge above the ring when it fits, otherwise below it.
-  const badge = badgeSize(stepNumber);
-  const aboveTop = ringTop - BADGE_GAP_PX - badge.height;
-  const badgeTop =
-    aboveTop >= 0
-      ? aboveTop
-      : Math.min(ringBottom + BADGE_GAP_PX, Math.max(0, height - badge.height));
-  const badgeLeft = clamp(ringLeft, 0, Math.max(0, width - badge.width));
+  const { left: badgeLeft, top: badgeTop } = placeBadge(stepNumber, { left: ringLeft, top: ringTop, bottom: ringBottom }, width, height);
 
   const svg = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,

@@ -23,11 +23,12 @@ function assertMenuValid(menu: BotCommandMenuEntry[]): void {
 }
 
 describe("BOT_COMMAND_MENU", () => {
-  test("billing off: exactly the five free commands, in order", () => {
+  test("billing off: exactly the six free commands, in order", () => {
     expect(BOT_COMMAND_MENU({ billingEnabled: false })).toEqual([
       { command: "start", description: "Say hello and get set up" },
       { command: "tasks", description: "See what is due next" },
       { command: "done", description: "Tick off a task, for example /done 1" },
+      { command: "review", description: "Practise a weak spot" },
       { command: "dashboard", description: "Open your dashboard on the web" },
       { command: "help", description: "What I can do" },
     ]);
@@ -35,9 +36,9 @@ describe("BOT_COMMAND_MENU", () => {
 
   test("billing on: pro is added, and only then", () => {
     const withPro = BOT_COMMAND_MENU({ billingEnabled: true });
-    expect(withPro).toHaveLength(6);
+    expect(withPro).toHaveLength(7);
     expect(withPro[withPro.length - 1]).toEqual({ command: "pro", description: "See the Pro plan" });
-    expect(withPro.slice(0, 5)).toEqual(BOT_COMMAND_MENU({ billingEnabled: false }));
+    expect(withPro.slice(0, 6)).toEqual(BOT_COMMAND_MENU({ billingEnabled: false }));
   });
 
   test("every entry in both variants is valid under Telegram's rules", () => {

@@ -17,6 +17,17 @@ function throwDb(op: string, error: DbError): never {
 export function createWeakSpotQueries(client: SupabaseClient) {
   return {
     // Ownership: filters by BOTH ids, like every other row-scoped write.
+    async getWeakSpot(userId: string, weakSpotId: string): Promise<WeakSpotRow | null> {
+      const { data, error } = await client
+        .from("weak_spots")
+        .select()
+        .eq("id", weakSpotId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (error) throwDb("getWeakSpot", error);
+      return (data as WeakSpotRow | null) ?? null;
+    },
+
     async setWeakSpotNextReview(
       userId: string,
       weakSpotId: string,
@@ -74,6 +85,10 @@ export type WeakSpotQueries = ReturnType<typeof createWeakSpotQueries>;
 
 // Top-level helpers bound to the shared service-role client, resolved at call
 // time so importing this module never touches the environment.
+export function getWeakSpotById(userId: string, weakSpotId: string): Promise<WeakSpotRow | null> {
+  return createWeakSpotQueries(getSupabase()).getWeakSpot(userId, weakSpotId);
+}
+
 export function setWeakSpotNextReview(
   userId: string,
   weakSpotId: string,

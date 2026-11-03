@@ -5,6 +5,14 @@ import { insertTaskEvent, listOpenTasks, updateTask } from "@/lib/db/queries";
 import type { InsertTaskEventInput, UpdateTaskPatch } from "@/lib/db/queries";
 import type { TaskRow, UserRow } from "@/lib/db/types";
 import { sortByPriority } from "@/lib/pipeline/priority";
+import type { RateLimitCheck } from "@/lib/telegram/limits";
+import { quizRateLimitedReply } from "@/lib/telegram/replies";
+import {
+  createReviewFlowDeps,
+  startReviewQuiz,
+  noReviewWaitingReply,
+} from "@/lib/weakspots/review-flow";
+import type { ReviewStartOutcome } from "@/lib/weakspots/review-flow";
 import {
   commandFailedReply,
   doneMissingReply,
@@ -162,6 +170,57 @@ export function createDoneCommand(deps: Partial<DoneCommandDeps> = {}) {
   };
 }
 
+// ---- /review -----------------------------------------------------------------
+
+export type ReviewCommandDeps = {
+  getUserByTelegramId: (telegramUserId: number) => Promise<UserRow | null>;
+  start: (userId: string) => Promise<ReviewStartOutcome>;
+  // Same per-user gate the ingest handlers use: starting can make one model
+  // call when nothing is stored, so it counts like any other AI moment.
+  checkRateLimit?: RateLimitCheck;
+};
+
+export function createReviewCommand(deps: Partial<ReviewCommandDeps> = {}) {
+  const getUser = deps.getUserByTelegramId ?? realGetUserByTelegramId;
+  const start = deps.start ?? ((userId: string) => startReviewQuiz(createReviewFlowDeps(), userId));
+  const check = deps.checkRateLimit;
+  return async (ctx: CommandContextLike): Promise<void> => {
+    const from = ctx.from;
+    if (!from) return;
+    try {
+      const user = await getUser(from.id);
+      if (user == null) {
+        await replyQuietly(ctx, noUserYetReply());
+        return;
+      }
+      if (check !== undefined) {
+        let verdict;
+        try {
+          verdict = await check(user.id);
+        } catch (error) {
+          // A failing lookup fails open exactly like the ingest gate.
+          console.error(
+            "[telegram] rate limit lookup failed, letting the quiz through:",
+            error instanceof Error ? error.message : String(error),
+          );
+          verdict = { allowed: true } as const;
+        }
+        if (!verdict.allowed) {
+          await replyQuietly(ctx, quizRateLimitedReply(verdict));
+          return;
+        }
+      }
+      const outcome = await start(user.id);
+      // The none outcome carries the friendly "no review waiting" line; every
+      // other outcome carries its own student wording too.
+      await replyQuietly(ctx, outcome.message || noReviewWaitingReply());
+    } catch (error) {
+      console.error("[telegram] /review failed:", error instanceof Error ? error.message : String(error));
+      await replyQuietly(ctx, commandFailedReply());
+    }
+  };
+}
+
 // ---- The "/" command menu Telegram shows above the keyboard -----------------
 // Without setMyCommands the menu never appears, so students cannot discover
 // the commands. Descriptions match what the commands actually do.
@@ -173,6 +232,7 @@ export function BOT_COMMAND_MENU(options: { billingEnabled: boolean }): BotComma
     { command: "start", description: "Say hello and get set up" },
     { command: "tasks", description: "See what is due next" },
     { command: "done", description: "Tick off a task, for example /done 1" },
+    { command: "review", description: "Practise a weak spot" },
     { command: "dashboard", description: "Open your dashboard on the web" },
     { command: "help", description: "What I can do" },
   ];

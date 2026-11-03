@@ -39,6 +39,7 @@ describe("/dashboard registration", () => {
       "/help",
       "/paysupport",
       "/pro",
+      "/review",
       "/start",
       "/tasks",
     ]);

@@ -10,7 +10,6 @@ import { buildMathUserText, MATH_SYSTEM_PROMPT } from '@/lib/meta/prompts/math';
 import { toPlainMath } from '@/lib/text/plain-math';
 import { normalizeTopic } from './math-topics';
 import {
-  MATH_TOPIC_LABELS,
   MathDiagnosisSchema,
   type Bbox,
   type MathDiagnosis,
@@ -153,11 +152,8 @@ export function diagnosisCaption(d: MathDiagnosis): string {
         : `This is where it slipped: ${d.what_went_wrong ?? ''}`;
     const parts = [studentSafe(lead.trim())];
     if (d.misconception != null) {
-      parts.push(
-        studentSafe(
-          `Why it matters: ${d.misconception.detail} (${MATH_TOPIC_LABELS[d.misconception.topic]})`,
-        ).trim(),
-      );
+      // The taxonomy label stays in storage only; students read the plain why.
+      parts.push(studentSafe(`Why it matters: ${d.misconception.detail}`).trim());
     }
     if (d.correct_next_step != null) {
       parts.push(studentSafe(`Try this instead: ${d.correct_next_step}`).trim());

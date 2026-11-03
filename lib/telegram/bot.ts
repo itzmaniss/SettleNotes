@@ -4,11 +4,12 @@ import { env } from "@/lib/env";
 import { createDashboardCommand, type DashboardContextLike } from "@/lib/auth/dashboard-command";
 import {
   createDoneCommand,
+  createReviewCommand,
   createTasksCommand,
   type CommandContextLike,
 } from "@/lib/telegram/commands";
 import { upsertUser } from "@/lib/db/queries";
-import { createPendingActionCallback, type CallbackContextLike } from "@/lib/telegram/callbacks";
+import { createPendingActionCallback, createReviewStartCallback, type CallbackContextLike, type ReviewCallbackContextLike } from "@/lib/telegram/callbacks";
 import { getAccessPolicy } from "@/lib/telegram/access";
 import {
   allowlistMiddleware,
@@ -112,6 +113,9 @@ export function registerHandlers(bot: Bot, consentDeps: ConsentDeps = createCons
   const doneCommand = createDoneCommand();
   bot.command("done", (ctx) => doneCommand(ctx as unknown as CommandContextLike));
 
+  const reviewCommand = createReviewCommand();
+  bot.command("review", (ctx) => reviewCommand(ctx as unknown as CommandContextLike));
+
   // The consent accept tap. Registered BEFORE the pending action callback: a
   // non tc:ok callback is handed to next() here, so pa: taps still reach it,
   // while tc:ok never can.
@@ -127,6 +131,16 @@ export function registerHandlers(bot: Bot, consentDeps: ConsentDeps = createCons
   // callback, and so a payment message never reaches the catch-all "message"
   // handler below.
   registerPaymentHandlers(bot);
+
+  // Taps on the Start review button of the review reply. Registered after the
+  // purchase confirm taps (both hand non-matching data to next()) and BEFORE
+  // the pending action callback, which swallows every tap: an rv: tap never
+  // reaches it. Sits behind the consent gate like the others because the
+  // consent middleware runs first on this bot.
+  const reviewStartCallback = createReviewStartCallback();
+  bot.on("callback_query:data", (ctx, next) =>
+    reviewStartCallback(ctx as unknown as ReviewCallbackContextLike, next),
+  );
 
   // Taps on the Yes/No buttons of a low-confidence clarification. The
   // allowlist middleware above runs first for callback updates too (they carry
@@ -154,6 +168,7 @@ export const HELP_TEXT = [
   "/start - reintroduce myself",
   "/tasks - show the five things to handle first",
   "/done <n> - tick one off by its number, like /done 1",
+  "/review - practise a weak spot",
   "/dashboard - get a single use link to open your dashboard",
   "/pro - see Settle Pro and pay with Telegram Stars",
   "/paysupport - help with a payment or a refund",

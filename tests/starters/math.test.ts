@@ -356,8 +356,10 @@ describe('diagnosisCaption', () => {
     const caption = diagnosisCaption(wrongDiagnosis());
     expect(caption.startsWith('Step 3 is where it slipped:')).toBe(true);
     expect(caption).toContain(
-      'Why it matters: Dividing both sides by the coefficient must give the same result on both sides. (Algebra manipulation)',
+      'Why it matters: Dividing both sides by the coefficient must give the same result on both sides.',
     );
+    // The taxonomy label stays in storage, never in student text.
+    expect(caption).not.toContain('(Algebra manipulation)');
     expect(caption).toContain('Try this instead: x = 8 / 2 = 4');
     expect(caption.length).toBeLessThanOrEqual(CAPTION_MAX_CHARS);
   });

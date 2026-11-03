@@ -286,6 +286,9 @@ describe("starterLine", () => {
 
 describe("fixed replies", () => {
   test("exact wording", () => {
+    expect(nothingFoundReply()).toBe(
+      "I read that, but I could not find any tasks in it. Send me something with a deadline and I will add it for you. You can also send /tasks to see what is due, or /review to practise a weak spot.",
+    );
     expect(failureReply()).toBe(
       "Sorry, I couldn't read that one. Could you send a clearer photo or the PDF instead?",
     );

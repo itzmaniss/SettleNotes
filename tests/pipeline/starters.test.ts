@@ -502,7 +502,7 @@ describe("runMathDiagnosis", () => {
     expect(result.outcome.annotated).toBeInstanceOf(Buffer);
     expect(result.outcome.annotated!.byteLength).toBeGreaterThan(0);
     expect(result.outcome.caption).toContain("Step 2 is where it slipped: 5 - 2 is 3, not 2");
-    expect(result.outcome.caption).toContain("(Sign errors)");
+    expect(result.outcome.caption).toContain("Why it matters: the subtraction slipped");
     expect(result.outcome.practiceText).toContain("7 - 3 = ?");
     expect(result.outcome.extra).toBeNull();
     assertNoDashes(result.outcome.caption);
