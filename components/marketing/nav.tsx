@@ -24,6 +24,12 @@ export function Nav() {
           >
             How it works
           </a>
+          <Link
+            href="/guides"
+            className="rounded-full px-1 py-2 underline-offset-4 hover:underline"
+          >
+            Guides
+          </Link>
           <a
             href="#pricing"
             className="rounded-full px-1 py-2 underline-offset-4 hover:underline"

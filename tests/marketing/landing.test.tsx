@@ -14,6 +14,19 @@ import {
   yearlyPerMonth,
   yearlySavingsPercent,
 } from "@/lib/billing/plans";
+import { loadGuide } from "@/lib/guides/content";
+
+const GUIDE_SLUGS = [
+  "track-deadlines-from-a-group-chat",
+  "check-your-maths-working",
+  "turn-lecture-slides-into-flashcards",
+  "assignment-brief-checklist",
+  "spaced-review-for-weak-spots",
+] as const;
+
+function loadGuideSummaryTitle(slug: string): string {
+  return loadGuide(slug).title;
+}
 
 const MARKETING_DIR = join(import.meta.dir, "..", "..", "components", "marketing");
 
@@ -201,6 +214,37 @@ describe("landing page", () => {
     expect(html).not.toContain("For tutors");
     expect(html).toContain('id="how"');
     expect(html).toContain('id="pricing"');
+  });
+
+  test("the nav gains a Guides link beside the section links, from md up", () => {
+    const html = renderPage();
+    expect(html).toContain('href="/guides"');
+    // Same hidden-until-md group as How it works and Pricing, so the 390px
+    // layout is untouched.
+    expect(html).toMatch(/hidden items-center gap-6 text-sm font-medium md:flex[^>]*>[\s\S]*?Guides/);
+  });
+
+  test("the footer links Guides and FAQ like the other row links", () => {
+    const html = renderPage();
+    expect(html).toContain('href="/faq"');
+    // The nav already carries /guides, so search inside the footer itself.
+    const footer = html.slice(html.indexOf('aria-label="Footer"'));
+    expect(footer).toContain('href="/guides"');
+    expect(footer).toContain('href="/faq"');
+  });
+
+  test("a Study guides section lists all five guides with one-line descriptions", () => {
+    const html = renderPage();
+    expect(html).toContain("Study guides");
+    expect((html.match(/href="\/guides\/[a-z-]+"/g) ?? []).length).toBe(5);
+    for (const slug of GUIDE_SLUGS) {
+      expect(html).toContain(`href="/guides/${slug}"`);
+      expect(html).toContain(loadGuideSummaryTitle(slug));
+    }
+  });
+
+  test("the guides section adds no second h1", () => {
+    expect(renderPage().match(/<h1\b/g)).toHaveLength(1);
   });
 
   test("no em or en dash anywhere in the rendered markup", () => {

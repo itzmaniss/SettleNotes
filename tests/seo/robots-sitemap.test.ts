@@ -62,6 +62,7 @@ describe("sitemap", () => {
       "https://settlenotes.com/terms",
       "https://settlenotes.com/privacy",
       "https://settlenotes.com/refund",
+      "https://settlenotes.com/guides",
     ]);
     expect(out[0]).toEqual({
       url: "https://settlenotes.com/",
@@ -71,6 +72,8 @@ describe("sitemap", () => {
     expect(out[1]!.lastModified).toEqual(new Date("2026-11-01"));
     expect(out[1]!.changeFrequency).toBe("monthly");
     expect(out[1]!.priority).toBe(0.5);
+    expect(out[4]!.changeFrequency).toBe("weekly");
+    expect(out[4]!.priority).toBe(0.8);
   });
 
   test("a marker drops that legal page, the rest stay", () => {
@@ -83,6 +86,7 @@ describe("sitemap", () => {
       "https://settlenotes.com/",
       "https://settlenotes.com/privacy",
       "https://settlenotes.com/refund",
+      "https://settlenotes.com/guides",
     ]);
   });
 
@@ -94,6 +98,7 @@ describe("sitemap", () => {
     expect(out.map((entry) => entry.url)).toEqual([
       "https://settlenotes.com/",
       "https://settlenotes.com/privacy",
+      "https://settlenotes.com/guides",
     ]);
   });
 });

@@ -4,6 +4,7 @@ import { Hero } from "@/components/marketing/hero";
 import { HowItWorks } from "@/components/marketing/how-it-works";
 import { Bento } from "@/components/marketing/bento";
 import { Pricing } from "@/components/marketing/pricing";
+import { GuidesSection } from "@/components/marketing/guides-section";
 import { LoopCta } from "@/components/marketing/loop-cta";
 import { Footer } from "@/components/marketing/footer";
 import { buildLandingJsonld, toJsonLdScript } from "@/lib/seo/jsonld";
@@ -27,6 +28,7 @@ export default function Home() {
         <HowItWorks />
         <Bento />
         <Pricing />
+        <GuidesSection />
         <LoopCta />
       </main>
       <Footer />

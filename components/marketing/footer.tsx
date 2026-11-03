@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Logo } from "@/components/settle";
 import { botLink } from "./links";
 import { LegalLinks } from "@/components/legal/legal-links";
@@ -31,6 +32,18 @@ export function Footer() {
           >
             Pricing
           </a>
+          <Link
+            href="/guides"
+            className="inline-flex items-center py-3 underline-offset-4 hover:underline sm:py-0"
+          >
+            Guides
+          </Link>
+          <Link
+            href="/faq"
+            className="inline-flex items-center py-3 underline-offset-4 hover:underline sm:py-0"
+          >
+            FAQ
+          </Link>
           {botHref !== null && (
             <a
               href={botHref}
