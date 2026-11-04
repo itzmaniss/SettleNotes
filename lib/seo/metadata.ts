@@ -11,9 +11,9 @@ import {
   siteUrl,
 } from "./site";
 
-export const LANDING_TITLE = "Settle: your group chat, sorted";
+export const LANDING_TITLE = "SettleNotes: your group chat, sorted";
 export const LANDING_DESCRIPTION =
-  "Forward your group chat, PDFs and math photos to the Settle Telegram bot. Settle turns deadlines into one task list and does the first step. Free to start.";
+  "Forward group chats, PDFs and math photos to the SettleNotes Telegram bot. Get one task list with a useful first step ready for each task. Free to start.";
 
 export const GUIDES_INDEX_TITLE = "Study guides";
 export const GUIDES_INDEX_DESCRIPTION =

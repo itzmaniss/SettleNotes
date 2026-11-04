@@ -82,16 +82,16 @@ async function buildOgImage(): Promise<void> {
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
       `<rect width="${width}" height="${height}" fill="${PAPER}"/>` +
       // Shadow copy first, ink text on top: a hard offset, no blur.
-      `<text x="530" y="330" font-family="sans-serif" font-weight="800" font-size="190" letter-spacing="-6" fill="${LILAC}">Settle</text>` +
-      `<text x="518" y="318" font-family="sans-serif" font-weight="800" font-size="190" letter-spacing="-6" fill="${INK}">Settle</text>` +
-      `<text x="522" y="438" font-family="sans-serif" font-weight="600" font-size="44" letter-spacing="1" fill="${INK}">Your group chat, sorted.</text>` +
+      `<text x="456" y="318" font-family="sans-serif" font-weight="800" font-size="112" letter-spacing="-3" fill="${LILAC}">SettleNotes</text>` +
+      `<text x="448" y="310" font-family="sans-serif" font-weight="800" font-size="112" letter-spacing="-3" fill="${INK}">SettleNotes</text>` +
+      `<text x="452" y="400" font-family="sans-serif" font-weight="600" font-size="36" letter-spacing="0.5" fill="${INK}">Your group chat, sorted.</text>` +
       `</svg>`,
   );
-  const markSize = 360;
+  const markSize = 300;
   const mark = await renderSvg(MARK_SVG, markSize);
   await sharp(textLayer)
     .composite([
-      { input: mark, top: Math.round((height - markSize) / 2), left: 96 },
+      { input: mark, top: Math.round((height - markSize) / 2), left: 88 },
     ])
     .png()
     .toFile(join(ROOT, "public/opengraph-image.png"));

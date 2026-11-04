@@ -48,11 +48,11 @@ describe("root metadata", () => {
   });
 
   test("keeps the title default and template", () => {
-    expect(meta.title).toEqual({ default: "Settle", template: "%s | Settle" });
+    expect(meta.title).toEqual({ default: "SettleNotes", template: "%s | SettleNotes" });
   });
 
   test("application name and the honest description", () => {
-    expect(meta.applicationName).toBe("Settle");
+    expect(meta.applicationName).toBe("SettleNotes");
     expect(meta.description).toBeTruthy();
     expect(meta.description).not.toMatch(DASH);
   });
@@ -72,11 +72,11 @@ describe("root metadata", () => {
 
   test("open graph: website card, en_SG, share image resolves absolute", () => {
     expect(og.type).toBe("website");
-    expect(og.siteName).toBe("Settle");
+    expect(og.siteName).toBe("SettleNotes");
     expect(og.locale).toBe("en_SG");
     const image = ogImages(og)[0]!;
     expect(new URL(image.url, meta.metadataBase as URL).toString()).toBe(
-      "https://settlenotes.com/opengraph-image.png",
+      "https://settlenotes.com/opengraph-image.png?v=settlenotes-1",
     );
     expect(image.width).toBe(1200);
     expect(image.height).toBe(630);
@@ -90,7 +90,7 @@ describe("root metadata", () => {
     expect(twitter.description).toBeTruthy();
     const image = twitter.images![0]!;
     expect(new URL(image, meta.metadataBase as URL).toString()).toBe(
-      "https://settlenotes.com/opengraph-image.png",
+      "https://settlenotes.com/opengraph-image.png?v=settlenotes-1",
     );
   });
 
@@ -116,7 +116,7 @@ describe("landing metadata", () => {
 
   test("title stays the plain absolute title", () => {
     expect(meta.title).toEqual({ absolute: LANDING_TITLE });
-    expect(LANDING_TITLE).toBe("Settle: your group chat, sorted");
+    expect(LANDING_TITLE).toBe("SettleNotes: your group chat, sorted");
   });
 
   test("the landing page carries the canonical", () => {
@@ -133,7 +133,7 @@ describe("landing metadata", () => {
 
   test("full open graph object, because pages replace instead of merge", () => {
     expect(og.type).toBe("website");
-    expect(og.siteName).toBe("Settle");
+    expect(og.siteName).toBe("SettleNotes");
     expect(og.locale).toBe("en_SG");
     expect(og.title).toBe(LANDING_TITLE);
     expect(og.description).toBe(LANDING_DESCRIPTION);
@@ -142,7 +142,7 @@ describe("landing metadata", () => {
       "https://settlenotes.com/",
     );
     const image = ogImages(og)[0]!;
-    expect(image.url).toBe("/opengraph-image.png");
+    expect(image.url).toBe("/opengraph-image.png?v=settlenotes-1");
     expect(image.width).toBe(1200);
     expect(image.height).toBe(630);
     expect(image.alt).toBeTruthy();
@@ -152,6 +152,6 @@ describe("landing metadata", () => {
     expect(twitter.card).toBe("summary_large_image");
     expect(twitter.title).toBe(LANDING_TITLE);
     expect(twitter.description).toBe(LANDING_DESCRIPTION);
-    expect(twitter.images![0]).toBe("/opengraph-image.png");
+    expect(twitter.images![0]).toBe("/opengraph-image.png?v=settlenotes-1");
   });
 });

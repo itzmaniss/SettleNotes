@@ -46,10 +46,10 @@ describe("buildGuideJsonld", () => {
     expect(serialized).not.toMatch(DASH);
   });
 
-  test("author and publisher are the Settle organisation with url and logo", () => {
+  test("author and publisher are the SettleNotes organisation with url and logo", () => {
     const expected = {
       "@type": "Organization",
-      name: "Settle",
+      name: "SettleNotes",
       url: "https://settlenotes.com/",
       logo: "https://settlenotes.com/brand/settle-icon-512.png",
     };

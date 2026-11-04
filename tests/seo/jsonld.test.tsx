@@ -25,14 +25,14 @@ describe("buildLandingJsonld", () => {
     const [org, website] = graph();
     expect(org!["url"]).toBe("https://settlenotes.com/");
     expect(org!["logo"]).toBe("https://settlenotes.com/brand/settle-icon-512.png");
-    expect(org!["name"]).toBe("Settle");
+    expect(org!["name"]).toBe("SettleNotes");
     expect(website!["url"]).toBe("https://settlenotes.com/");
-    expect(website!["name"]).toBe("Settle");
+    expect(website!["name"]).toBe("SettleNotes");
   });
 
   test("the app offer is the free plan only, nothing invented", () => {
     const app = graph()[2]!;
-    expect(app["name"]).toBe("Settle");
+    expect(app["name"]).toBe("SettleNotes");
     expect(app["applicationCategory"]).toBe("EducationalApplication");
     expect(app["operatingSystem"]).toBe("Telegram");
     expect(app["offers"]).toEqual({ "@type": "Offer", price: "0", priceCurrency: "SGD" });

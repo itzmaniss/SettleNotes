@@ -3,16 +3,16 @@
 // reads) and this module turns it into the one canonical origin every tag on
 // the site shares, or the production fallback when the value is useless.
 
-export const SITE_NAME = "Settle";
+export const SITE_NAME = "SettleNotes";
 export const SITE_TAGLINE = "Your group chat, sorted.";
 export const DEFAULT_DESCRIPTION =
-  "Forward your group chat, PDFs and math photos to a Telegram bot. Settle turns them into one task list and starts each task for you.";
+  "Forward your group chat, PDFs and math photos to a Telegram bot. SettleNotes turns them into one task list and starts each task for you.";
 
-export const OG_IMAGE_PATH = "/opengraph-image.png";
+export const OG_IMAGE_PATH = "/opengraph-image.png?v=settlenotes-1";
 export const OG_IMAGE_WIDTH = 1200;
 export const OG_IMAGE_HEIGHT = 630;
 export const OG_IMAGE_ALT =
-  "The Settle wordmark beside the lime speech bubble mark, with the tagline Your group chat, sorted.";
+  "The SettleNotes wordmark beside the lime speech bubble mark, with the tagline Your group chat, sorted.";
 
 const FALLBACK_ORIGIN = "https://settlenotes.com";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "[::1]"]);
