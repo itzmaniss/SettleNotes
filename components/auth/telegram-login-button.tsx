@@ -25,8 +25,17 @@ export function TelegramLoginButton({ botUsername, authUrl }: TelegramLoginButto
 
   return (
     <>
-      {/* min-h-10 reserves the 40px button slot so layout does not jump on mount. */}
-      <div ref={containerRef} className="min-h-10" />
+      {/* The widget iframe is opaque, so outside its rounded pill the document
+          shows as black corners. The container clips it with a fully rounded
+          box sized to the pill (Telegram sets the iframe width to the label,
+          hence w-fit), and the outer wrapper centres that box in the card. */}
+      <div className="flex w-full justify-center">
+        {/* min-h-10 reserves the 40px button slot so layout does not jump on mount. */}
+        <div
+          ref={containerRef}
+          className="mx-auto min-h-10 w-fit overflow-hidden rounded-full [&_iframe]:block"
+        />
+      </div>
       <noscript>Enable JavaScript to log in with Telegram.</noscript>
     </>
   );

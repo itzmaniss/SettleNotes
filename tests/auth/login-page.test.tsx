@@ -36,7 +36,16 @@ describe("TelegramLoginButton", () => {
     // React 19 hoists server rendered <script async> into <head>, where the
     // widget renders 0x0. The HTML ships only the container; the widget script
     // is appended client side inside it (unit tested in telegram-widget.test.ts).
+    // The outer wrapper centres the widget; the container clips the opaque
+    // iframe to a fully rounded pill so no black corners show.
+    expect(html).toContain("flex w-full justify-center");
+    expect(html).toContain("mx-auto");
+    expect(html).toContain("rounded-full");
+    expect(html).toContain("overflow-hidden");
+    expect(html).toContain("w-fit");
     expect(html).toContain("min-h-10");
+    // React escapes the ampersand in server rendered attribute values.
+    expect(html).toContain("[&amp;_iframe]:block");
     expect(html).not.toContain("<script");
     expect(html).not.toContain("telegram-widget.js");
     expect(html).not.toContain("@");
