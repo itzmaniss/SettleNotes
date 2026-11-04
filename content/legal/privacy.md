@@ -37,12 +37,12 @@ Some of these providers may handle or look at information outside Singapore. Sup
 
 ## 4. How long we keep it, and deleting it
 
-While your account is active we keep your information so Settle can work for you. If you ask us to close your account, we delete your messages, uploads, stored files, transcripts, tasks, study material and account details. We aim to reply to you within 7 days of your request and to finish within 30 days of confirming it is you, and always within 60 days.
+While your account is active we keep your information so Settle can work for you. You can delete your account yourself at any time: log in to the website, open Account, and choose Delete my account. That deletes your messages, uploads, stored files, transcripts, tasks, study material and account details straight away. If you have a paid plan, cancel it first so you are not charged again; the website will tell you how. You can also ask us to close your account by email. We aim to reply to an email request within 7 days of your request and to finish within 30 days of confirming it is you, and always within 60 days.
 
 What deleting covers and what it does not:
 
-- We delete the database records and the stored files linked to your account straight away when we run the deletion. We do not keep routine backups of the database, so there is no older copy to wait for. If we take a manual copy before a risky change, we delete it within 30 days.
-- Payment records stay for 5 years, because we must keep business accounting records for that long, but when you ask us to delete your account we remove your Telegram and account numbers from them.
+- We delete the database records and the stored files linked to your account straight away when the deletion runs, whether you start it yourself or we run it for you. We do not keep routine backups of the database, so there is no older copy to wait for. If we take a manual copy before a risky change, we delete it within 30 days.
+- Payment records stay for 5 years, because we must keep business accounting records for that long, but when your account is deleted we remove your Telegram and account numbers from them.
 - Stripe keeps its own records of web payments, and Telegram keeps its own records of Stars payments, under their own policies. We cannot delete those for you.
 - Your chat with the bot stays in your own Telegram account. You can delete it there.
 
@@ -50,7 +50,7 @@ Each quarter we review accounts that nobody has used for 12 months, and we may d
 
 ## 5. Your choices and requests
 
-You can email {{support_email}} to ask what Settle holds about you, get a copy, ask us to correct it, ask us to close your account, or take back any optional consent. We will ask you to confirm it is you through your own Telegram account before we share or delete anything. Some information may need to be kept where the law requires or allows it.
+You can download a copy of your information yourself from the Account page on the website. You can also email {{support_email}} to ask what Settle holds about you, get a copy, ask us to correct it, ask us to close your account, or take back any optional consent. We will ask you to confirm it is you through your own Telegram account before we share or delete anything. Some information may need to be kept where the law requires or allows it.
 
 If you are aged 15 to 17, we try to write in plain language, and you can usually manage your own information and give your own consent if you understand this notice. A parent or guardian can email us about a student's account. Because the information belongs to the student, we will normally ask the student to confirm through their own Telegram account before we share or delete anything. If a student cannot confirm, we decide case by case and may ask for proof that you are their parent or guardian.
 
