@@ -36,6 +36,7 @@ describe("middleware", () => {
       "/tasks/:path*",
       "/weak-spots/:path*",
       "/billing/:path*",
+      "/account/:path*",
     ]);
     expect(JSON.stringify(config.matcher)).not.toContain("accept");
   });

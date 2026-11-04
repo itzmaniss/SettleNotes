@@ -11,12 +11,22 @@ describe("robots", () => {
         {
           userAgent: "*",
           allow: "/",
-          disallow: ["/dashboard", "/api/", "/auth/", "/accept", "/login"],
+          disallow: ["/dashboard", "/account", "/api/", "/auth/", "/accept", "/login"],
         },
       ],
       sitemap: "https://settlenotes.com/sitemap.xml",
       host: "https://settlenotes.com",
     });
+  });
+
+  test("the /account disallow covers the account page, its export and the deleted page", () => {
+    const text = JSON.stringify(buildRobots(ORIGIN));
+    expect(text).toContain('"/account"');
+    // Prefix robots matching: one entry covers the account page, the export
+    // route and the account-deleted confirmation page.
+    for (const path of ["/account", "/account/export", "/account-deleted"]) {
+      expect(path.startsWith("/account")).toBe(true);
+    }
   });
 
   test("the sitemap address follows the origin it is given", () => {

@@ -1,6 +1,6 @@
 # Where student data lives, and how it goes away
 
-One page for the operator and for counsel. Every statement below can be checked against this repository. Anything this document cannot verify from the repository carries a bracketed note instead of a guess. The erase script is `scripts/delete-user.ts` (library in `lib/privacy/`), the export script is `scripts/export-user.ts`, the stale account sweep is `scripts/stale-accounts.ts`.
+One page for the operator and for counsel. Every statement below can be checked against this repository. Anything this document cannot verify from the repository carries a bracketed note instead of a guess. The erase script is `scripts/delete-user.ts` (library in `lib/privacy/`), the export script is `scripts/export-user.ts`, the stale account sweep is `scripts/stale-accounts.ts`. Students can also download a copy of their data and delete their account themselves from the Account page on the website, which runs the same `lib/privacy` library for their own signed-in account only.
 
 ## Where student data lives
 

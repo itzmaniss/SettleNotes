@@ -199,7 +199,7 @@ docker compose -f deploy/docker-compose.yml up -d --force-recreate app
 
 ## 11. Handling a data request
 
-A student can ask for a copy of their data, or ask you to delete it. Singapore's PDPA lets them make that request by email; the bot has no self service button for it. The two scripts do the work; this section is the process. Where every place data lives, how long it stays and how it is removed is written down in `docs/DATA-MAP.md`; read it once before you handle the first request.
+A student can ask for a copy of their data, or ask you to delete it. Singapore's PDPA lets them make that request by email; the bot has no self service button for it. Self service exists on the website: a signed-in student can download their data and delete their account from the Account page, which runs the same library code as the two scripts below, for their own account only. The two scripts do the work for requests that arrive by email; this section is the process. Where every place data lives, how long it stays and how it is removed is written down in `docs/DATA-MAP.md`; read it once before you handle the first request.
 
 Proposed service levels, clearly marked as proposals until counsel agrees them: acknowledge any data request within 7 days, and complete a verified request within 30 days. Both are proposals, not yet agreed; if you cannot meet one, tell the student when they will get an answer.
 

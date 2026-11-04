@@ -28,6 +28,11 @@ describe("isProtectedPath", () => {
       ["/billing/", true],
       ["/billing/invoice-1", true],
       ["/billingpage", false],
+      ["/account", true],
+      ["/account/", true],
+      ["/account/export", true],
+      ["/account-deleted", false],
+      ["/accounts", false],
       ["/", false],
       ["", false],
       ["/api/telegram", false],
@@ -42,7 +47,13 @@ describe("isProtectedPath", () => {
   test("constants match the spec", () => {
     expect(POST_LOGIN_PATH).toBe("/dashboard");
     expect(EXPIRED_PATH).toBe("/auth/expired");
-    expect(PROTECTED_PREFIXES).toEqual(["/dashboard", "/tasks", "/weak-spots", "/billing"]);
+    expect(PROTECTED_PREFIXES).toEqual([
+      "/dashboard",
+      "/tasks",
+      "/weak-spots",
+      "/billing",
+      "/account",
+    ]);
   });
 });
 
