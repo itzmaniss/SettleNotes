@@ -1,25 +1,32 @@
 "use client";
 
-// Injects the official Telegram Login Widget script. The widget only renders
-// on the https domain registered with BotFather (/setdomain), so the login
-// page decides between this and a plain bot fallback.
+import { useEffect, useRef } from "react";
+import { mountTelegramWidget } from "@/components/auth/telegram-widget";
+
+// Injects the official Telegram Login Widget. The widget only renders on the
+// https domain registered with BotFather (/setdomain), so the login page
+// decides between this and a plain bot fallback.
 type TelegramLoginButtonProps = {
   botUsername: string;
   authUrl: string;
 };
 
 export function TelegramLoginButton({ botUsername, authUrl }: TelegramLoginButtonProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // The widget script inserts its iframe next to itself (document.currentScript)
+  // and React 19 hoists JSX <script async> into <head>, where that iframe lands
+  // 0x0 and invisible. The tag is appended inside the container at mount time.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    return mountTelegramWidget(container, { botUsername, authUrl });
+  }, [botUsername, authUrl]);
+
   return (
     <>
-      <script
-        async
-        src="https://telegram.org/js/telegram-widget.js?22"
-        data-telegram-login={botUsername}
-        data-size="large"
-        data-userpic="false"
-        data-auth-url={authUrl}
-        data-request-access="write"
-      />
+      {/* min-h-10 reserves the 40px button slot so layout does not jump on mount. */}
+      <div ref={containerRef} className="min-h-10" />
       <noscript>Enable JavaScript to log in with Telegram.</noscript>
     </>
   );

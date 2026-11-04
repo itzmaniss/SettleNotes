@@ -29,19 +29,19 @@ afterEach(() => {
 });
 
 describe("TelegramLoginButton", () => {
-  test("renders the classic widget script with the documented attributes", () => {
+  test("renders a mount container, not a hoisted script tag", () => {
     const html = renderToStaticMarkup(
       <TelegramLoginButton botUsername="settle_bot" authUrl="https://settle.example.com/auth/telegram" />,
     );
-    expect(html).toContain('src="https://telegram.org/js/telegram-widget.js?22"');
-    expect(html).toContain("async");
-    expect(html).toContain('data-telegram-login="settle_bot"');
+    // React 19 hoists server rendered <script async> into <head>, where the
+    // widget renders 0x0. The HTML ships only the container; the widget script
+    // is appended client side inside it (unit tested in telegram-widget.test.ts).
+    expect(html).toContain("min-h-10");
+    expect(html).not.toContain("<script");
+    expect(html).not.toContain("telegram-widget.js");
     expect(html).not.toContain("@");
-    expect(html).toContain('data-size="large"');
-    expect(html).toContain('data-userpic="false"');
-    expect(html).toContain('data-auth-url="https://settle.example.com/auth/telegram"');
-    expect(html).toContain('data-request-access="write"');
     expect(html).toContain("<noscript");
+    expect(html).toContain("Enable JavaScript to log in with Telegram.");
   });
 });
 
