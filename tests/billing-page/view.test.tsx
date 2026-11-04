@@ -360,8 +360,9 @@ describe("BillingPanel", () => {
       }),
     );
     // The apostrophe is HTML escaped by React, so assert on both halves.
-    expect(html).toContain("Your Pro runs through Telegram");
-    expect(html).toContain("subscription settings");
+    expect(html).toContain("Your plan runs through Telegram");
+    expect(html).toContain("To cancel, open the Settle chat");
+    expect(html).toContain("Subscriptions settings");
     expect(html).not.toContain(MANAGE_BUTTON_LABEL);
     expect(html).not.toContain("<form");
   });

@@ -162,8 +162,10 @@ describe("the legal document component", () => {
     expect(html).toContain("<header");
     expect(html).toContain("<footer");
     expect(html).toContain("<article");
-    expect(html).toContain('aria-label="Settle home"');
-    expect(html).toContain('aria-label="Legal"');
+    // The shared site header and footer: the brand links home and the
+    // header carries the Site nav, so no legal page is a dead end.
+    expect(html).toMatch(/<a [^>]*href="\/"[^>]*>/);
+    expect(html).toContain('aria-label="Site"');
     expect(html).toContain("<h1");
     expect(html).toContain("<h2");
     expect(html).toContain("<ul");

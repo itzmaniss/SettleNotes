@@ -13,10 +13,11 @@ import {
   ACCOUNT_DOWNLOAD_BUTTON_LABEL,
   ACCOUNT_DOWNLOAD_HEADING,
   ACCOUNT_LOGOUT_NOTE,
-  ACCOUNT_PLAN_LABEL,
+  ACCOUNT_PLAN_BILLING_LINK_LABEL,
   ACCOUNT_PRIVACY_LINE,
   ACCOUNT_PRIVACY_LINK_LABEL,
   ACCOUNT_TITLE,
+  ACCOUNT_YOUR_PLAN_HEADING,
   ACCOUNT_YOU_HEADING,
   LOG_OUT_BUTTON_LABEL,
 } from "@/lib/account/web-copy";
@@ -68,9 +69,18 @@ export function AccountPanel({ view, logOut, deleteAccount }: AccountPanelProps)
           <p className="font-display text-2xl font-extrabold">
             {view.firstName ?? ACCOUNT_NAME_FALLBACK}
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {ACCOUNT_PLAN_LABEL}: {view.planName}
-          </p>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 rounded-2xl border border-border px-3">
+            <p className="py-2 text-sm">
+              <span className="text-muted-foreground">{ACCOUNT_YOUR_PLAN_HEADING}: </span>
+              <span className="font-semibold">{view.planName}</span>
+            </p>
+            <Link
+              href="/billing"
+              className="inline-flex min-h-[44px] items-center text-sm font-semibold underline underline-offset-4"
+            >
+              {ACCOUNT_PLAN_BILLING_LINK_LABEL}
+            </Link>
+          </div>
           <form action={logOut} className="mt-4">
             <ChunkButton tone="ink" type="submit" className="w-full justify-center">
               {LOG_OUT_BUTTON_LABEL}

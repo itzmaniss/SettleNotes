@@ -2,11 +2,14 @@
 // here from plans.ts and the stored subscription rows, so the page component
 // only renders. Copy lives in exported constants so wording changes happen in
 // one place. No Stripe, env or db imports.
-import { PLANS, formatPrice, yearlySavingsPercent, type PlanId } from "./plans";
+import { PLANS, formatPrice, yearlySavingsPercent, type Feature, type PlanId } from "./plans";
 import { PURCHASE_CONFIRM_FAILED, PURCHASE_CONFIRM_WEB_ERROR } from "./purchase-consent-copy";
 import type { PlanView } from "@/lib/dashboard/plan";
 import { buildPlanView } from "@/lib/dashboard/plan";
 import { isTestModeKey, managedPaymentsEnabled, stripeConfigured, type StripeEnvConfig } from "./stripe";
+// The Stars cancel steps live in the client safe account copy leaf so the
+// account deletion banner and the billing page quote one set of steps.
+import { STARS_CANCEL_STEPS } from "@/lib/account/web-copy";
 import { MANAGED_PORTAL_LINE } from "./web-copy";
 
 // ---- Copy (plain, friendly, no dashes) --------------------------------------
@@ -15,9 +18,21 @@ export const CLOSED_NOTE = "Paid plans are not open yet.";
 export const PREFER_TELEGRAM_LINE =
   "Prefer Telegram? You can also subscribe with Stars from the bot.";
 export const STARS_ACTIVE_LINE =
-  "Your Pro runs through Telegram. Manage it in Telegram's subscription settings.";
+  `Your plan runs through Telegram. To cancel, ${STARS_CANCEL_STEPS}.`;
 export const PAYNOW_LABEL = "Pay once with PayNow for a year";
-export const MANAGE_BUTTON_LABEL = "Manage subscription";
+// The portal button is the only change path for a Stripe subscription, so the
+// label says what it is for and the lines under it say what it does, in one
+// plain sentence each. All three are true in code: openPortalFor opens a
+// Stripe customer portal for cancel and update, cancelling keeps Pro until
+// the paid period ends (the refund policy sentence), and the app has no
+// interval switch of its own for an active subscription.
+export const MANAGE_BUTTON_LABEL = "Manage or cancel your plan";
+export const PORTAL_PURPOSE_LINE =
+  "This button opens Stripe's customer portal, where you can change or cancel your plan.";
+export const PORTAL_KEEP_PRO_LINE =
+  "If you cancel, you keep Pro until the end of the period you already paid for.";
+export const PORTAL_SWITCH_LINE =
+  "Moving between monthly and yearly is done in the portal too.";
 export const TEST_MODE_STICKER = "Test mode, no real charges";
 export { WEB_NUDGE_LINE, MANAGED_PORTAL_LINE } from "./web-copy";
 
@@ -37,6 +52,34 @@ export const CONFIRM_FAILED_BANNER = PURCHASE_CONFIRM_FAILED;
 
 export const MONTHLY_LABEL = "Monthly";
 export const YEARLY_LABEL = "Yearly";
+
+// ---- The closed billing line ---------------------------------------------------
+
+// Student words for each feature id in plans.ts.
+const FREE_FEATURE_WORDS: Record<Feature, string> = {
+  chat_capture: "chat capture",
+  math_diagnosis: "maths checks",
+  slides_flashcards: "slide decks",
+  brief_checklist: "briefs",
+  weak_spot_tracker: "the weak spot tracker",
+};
+
+// 'a, b and c' with no Oxford comma, matching the lock banner wording.
+function joinNames(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]!}`;
+}
+
+// The one honest line under the closed note: what Free already covers, with
+// the limited features read straight from the plans.ts free quotas, so the
+// words can never drift from the numbers the usage gate enforces.
+export function freeCoverLine(): string {
+  const limited = (Object.keys(PLANS.free.quotas) as Feature[])
+    .filter((key) => typeof PLANS.free.quotas[key] === "number")
+    .map((key) => FREE_FEATURE_WORDS[key]);
+  if (limited.length === 0) return "Free covers chat capture and deadline tracking.";
+  return `Free covers chat capture and deadline tracking, with monthly limits on ${joinNames(limited)}.`;
+}
 
 // ---- Checkout options (prices only ever from plans.ts) ------------------------
 

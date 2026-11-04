@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { LegalLinks } from "@/components/legal/legal-links";
-import { Logo } from "@/components/settle";
+import { Footer } from "@/components/marketing/footer";
+import { Nav } from "@/components/marketing/nav";
 import { listGuides } from "@/lib/guides/content";
 import { buildGuidesIndexJsonld, toJsonLdScript } from "@/lib/seo/jsonld";
 import { GUIDES_INDEX_DESCRIPTION, GUIDES_INDEX_TITLE, guidesIndexMetadata } from "@/lib/seo/metadata";
@@ -20,17 +20,7 @@ export default function GuidesIndexPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonld }} />
-      <header className="border-b-2 border-border">
-        <div className="mx-auto w-full max-w-3xl px-4 py-3">
-          <Link
-            href="/"
-            aria-label="Settle home"
-            className="inline-flex min-h-[44px] items-center gap-2"
-          >
-            <Logo size={28} wordmark />
-          </Link>
-        </div>
-      </header>
+      <Nav />
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-12 pt-8">
         <article className="max-w-[65ch]">
           <h1 className="font-display text-3xl font-bold sm:text-4xl">{GUIDES_INDEX_TITLE}</h1>
@@ -62,11 +52,7 @@ export default function GuidesIndexPage() {
           </p>
         </article>
       </main>
-      <footer className="border-t-2 border-border">
-        <div className="mx-auto w-full max-w-3xl px-4 py-4">
-          <LegalLinks />
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

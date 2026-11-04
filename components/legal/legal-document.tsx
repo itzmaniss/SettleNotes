@@ -1,7 +1,5 @@
-import Link from "next/link";
-
-import { LegalLinks } from "@/components/legal/legal-links";
-import { Logo } from "@/components/settle";
+import { Footer } from "@/components/marketing/footer";
+import { Nav } from "@/components/marketing/nav";
 import type { LegalDocument } from "@/lib/legal/content";
 import type { LegalBlock, LegalSpan } from "@/lib/legal/markdown";
 
@@ -75,23 +73,13 @@ function BlockView({ block }: { block: LegalBlock }) {
   );
 }
 
-// The whole legal page shell for one loaded document: header with the logo
-// linking home, the prose column, and the footer legal links. Server safe:
-// no client hooks, no event handlers, nothing but markup.
+// The whole legal page shell for one loaded document: the site header and
+// footer every public page shares, around the 65ch readable article. Server
+// safe: no client hooks, no event handlers, nothing but markup.
 export function LegalDocumentView({ doc }: { doc: LegalDocument }) {
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="border-b-2 border-border">
-        <div className="mx-auto w-full max-w-3xl px-4 py-3">
-          <Link
-            href="/"
-            aria-label="Settle home"
-            className="inline-flex min-h-[44px] items-center gap-2"
-          >
-            <Logo size={28} wordmark />
-          </Link>
-        </div>
-      </header>
+      <Nav />
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-12 pt-8">
         <article className="max-w-[65ch]">
           <h1 className="font-display text-3xl font-bold sm:text-4xl">{doc.title}</h1>
@@ -102,11 +90,7 @@ export function LegalDocumentView({ doc }: { doc: LegalDocument }) {
             ))}
         </article>
       </main>
-      <footer className="border-t-2 border-border">
-        <div className="mx-auto w-full max-w-3xl px-4 py-4">
-          <LegalLinks />
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

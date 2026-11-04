@@ -11,7 +11,8 @@ import {
   ACCOUNT_DOWNLOAD_BUTTON_LABEL,
   ACCOUNT_LOGOUT_NOTE,
   ACCOUNT_NAME_FALLBACK,
-  ACCOUNT_PLAN_LABEL,
+  ACCOUNT_PLAN_BILLING_LINK_LABEL,
+  ACCOUNT_YOUR_PLAN_HEADING,
   ACCOUNT_PRIVACY_LINK_LABEL,
   ACCOUNT_TITLE,
   BOX_NEEDED_BANNER,
@@ -96,9 +97,12 @@ describe("AccountPanel", () => {
     expect(render({ firstName: null })).toContain(ACCOUNT_NAME_FALLBACK);
   });
 
-  test("the plan line uses the view model plan name", () => {
+  test("the plan block shows the plan name and one link to /billing", () => {
     const html = render({ planName: "Pro" });
-    expect(html).toContain(`${ACCOUNT_PLAN_LABEL}: Pro`);
+    expect(html).toContain(ACCOUNT_YOUR_PLAN_HEADING);
+    expect(html).toContain(">Pro<");
+    expect(html).toContain(ACCOUNT_PLAN_BILLING_LINK_LABEL);
+    expect(html).toMatch(/<a [^>]*href="\/billing"[^>]*>[^<]*Plan and billing/);
   });
 
   test("the Log out control is a form button, with the browser note under it", () => {

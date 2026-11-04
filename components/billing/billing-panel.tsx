@@ -10,8 +10,12 @@ import {
   MANAGE_BUTTON_LABEL,
   PAYNOW_LABEL,
   PREFER_TELEGRAM_LINE,
+  PORTAL_KEEP_PRO_LINE,
+  PORTAL_PURPOSE_LINE,
+  PORTAL_SWITCH_LINE,
   STARS_ACTIVE_LINE,
   TEST_MODE_STICKER,
+  freeCoverLine,
   type BillingPageView,
 } from "@/lib/billing/view";
 
@@ -92,8 +96,11 @@ export function BillingPanel({ view, startCheckout, openPortal }: BillingPanelPr
               {MANAGE_BUTTON_LABEL}
             </ChunkButton>
           </form>
+          <p className="mt-2 text-sm text-muted-foreground">{PORTAL_PURPOSE_LINE}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{PORTAL_KEEP_PRO_LINE}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{PORTAL_SWITCH_LINE}</p>
           {view.portalNote !== null && (
-            <p className="mt-2 text-sm text-muted-foreground">{view.portalNote}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{view.portalNote}</p>
           )}
         </section>
       ) : view.starsActive ? (
@@ -162,7 +169,10 @@ export function BillingPanel({ view, startCheckout, openPortal }: BillingPanelPr
           </section>
         ) : null
       ) : (
-        <p className="mt-8 text-sm text-muted-foreground">{CLOSED_NOTE}</p>
+        <div className="mt-8 text-sm text-muted-foreground">
+          <p>{CLOSED_NOTE}</p>
+          <p className="mt-1">{freeCoverLine()}</p>
+        </div>
       )}
     </div>
   );

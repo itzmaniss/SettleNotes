@@ -26,6 +26,21 @@ const LINKS = [
     href: "/account",
     isActive: (path: string) => path.startsWith("/account"),
   },
+  {
+    label: "Plan",
+    href: "/billing",
+    isActive: (path: string) => path.startsWith("/billing"),
+    // Phones reach Plan through the slim second row instead: a fifth pill in
+    // this row would push Tasks, Study, Weak spots and Account past a 390px
+    // screen.
+    smOnly: true,
+  },
+] as const;
+
+const PHONE_LINKS = [
+  { label: "Plan", href: "/billing" },
+  { label: "Home page", href: "/" },
+  { label: "Help", href: "/faq" },
 ] as const;
 
 export function DashboardNav({ todayLabel }: { todayLabel: string }) {
@@ -56,6 +71,7 @@ export function DashboardNav({ todayLabel }: { todayLabel: string }) {
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex min-h-[44px] items-center whitespace-nowrap rounded-full px-2 py-1 sm:px-3",
+                  "smOnly" in link && link.smOnly === true && "hidden sm:flex",
                   active && "border-2 border-border bg-accent text-accent-foreground",
                 )}
               >
@@ -67,6 +83,21 @@ export function DashboardNav({ todayLabel }: { todayLabel: string }) {
         <span className="ml-auto hidden font-mono text-xs uppercase tracking-wider text-muted-foreground sm:block">
           {todayLabel}
         </span>
+      </div>
+      {/* Phone only row under the pill bar: Plan, the public home page and
+          Help. Three short labels, about 140px of text in a 328px row on a
+          360px screen, spread with justify-between, each label nowrap and
+          each link 44px tall, so nothing wraps or overflows. */}
+      <div className="mt-2 flex items-center justify-between px-2 text-sm sm:hidden">
+        {PHONE_LINKS.map((link) => (
+          <Link
+            key={link.href}
+            href={link.href}
+            className="inline-flex min-h-[44px] items-center whitespace-nowrap font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            {link.label}
+          </Link>
+        ))}
       </div>
     </header>
   );

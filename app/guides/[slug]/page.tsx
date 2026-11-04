@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
-import { LegalLinks } from "@/components/legal/legal-links";
-import { Logo } from "@/components/settle";
+import { Footer } from "@/components/marketing/footer";
+import { Nav } from "@/components/marketing/nav";
 import { GUIDE_SLUGS, loadGuide } from "@/lib/guides/content";
 import { formatLegalDate } from "@/lib/legal/tokens";
 import { buildGuideJsonld, toJsonLdScript } from "@/lib/seo/jsonld";
@@ -37,17 +36,7 @@ export default async function GuidePage({ params }: GuidePageProps) {
   return (
     <div className="flex min-h-screen flex-col">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonld }} />
-      <header className="border-b-2 border-border">
-        <div className="mx-auto w-full max-w-3xl px-4 py-3">
-          <Link
-            href="/"
-            aria-label="Settle home"
-            className="inline-flex min-h-[44px] items-center gap-2"
-          >
-            <Logo size={28} wordmark />
-          </Link>
-        </div>
-      </header>
+      <Nav />
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-12 pt-8">
         <article className="max-w-[65ch]">
           <GuideBreadcrumb title={guide.title} />
@@ -63,11 +52,7 @@ export default async function GuidePage({ params }: GuidePageProps) {
           <GuideCtaButton />
         </article>
       </main>
-      <footer className="border-t-2 border-border">
-        <div className="mx-auto w-full max-w-3xl px-4 py-4">
-          <LegalLinks />
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

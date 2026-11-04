@@ -3,6 +3,8 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Chunk, ChunkButton, Logo, Sticker } from "@/components/settle";
+import { Footer } from "@/components/marketing/footer";
+import { Nav } from "@/components/marketing/nav";
 import { LegalLinks } from "@/components/legal/legal-links";
 import { acceptAgree } from "./actions";
 import { resolveAcceptVisitor, realAcceptDeps } from "@/lib/auth/accept";
@@ -36,30 +38,34 @@ export default async function AcceptPage({ searchParams }: AcceptPageProps) {
   if (visitor.kind === "accepted") redirect(POST_LOGIN_PATH);
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-12">
-      <Chunk tone="card" className="w-full max-w-md p-6 text-center sm:p-8">
-        <Logo size={40} />
-        <Sticker tone="accent" tilt={2} className="mt-5">
-          one step
-        </Sticker>
-        <h1 className="mt-5 font-display text-2xl font-bold sm:text-3xl">{ACCEPT_TITLE}</h1>
-        <p className="mt-4 text-base leading-relaxed">{ACCEPT_BODY}</p>
-        <LegalLinks className="mt-4 justify-center" />
-        {/* Identity is re-verified from the cookies inside the action; the
-            hidden field only carries the constrained navigation hint. */}
-        <form action={acceptAgree} className="mt-6">
-          <input type="hidden" name="next" value={next} />
-          <ChunkButton type="submit" className="w-full">
-            {ACCEPT_CONFIRM}
-          </ChunkButton>
-        </form>
-        <Link
-          href="/"
-          className="mt-3 inline-flex min-h-[44px] items-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-        >
-          {ACCEPT_DECLINE}
-        </Link>
-      </Chunk>
-    </main>
+    <div className="flex min-h-screen flex-col">
+      <Nav />
+      <main className="flex flex-1 items-center justify-center px-4 py-12">
+        <Chunk tone="card" className="w-full max-w-md p-6 text-center sm:p-8">
+          <Logo size={40} />
+          <Sticker tone="accent" tilt={2} className="mt-5">
+            one step
+          </Sticker>
+          <h1 className="mt-5 font-display text-2xl font-bold sm:text-3xl">{ACCEPT_TITLE}</h1>
+          <p className="mt-4 text-base leading-relaxed">{ACCEPT_BODY}</p>
+          <LegalLinks className="mt-4 justify-center" />
+          {/* Identity is re-verified from the cookies inside the action; the
+              hidden field only carries the constrained navigation hint. */}
+          <form action={acceptAgree} className="mt-6">
+            <input type="hidden" name="next" value={next} />
+            <ChunkButton type="submit" className="w-full">
+              {ACCEPT_CONFIRM}
+            </ChunkButton>
+          </form>
+          <Link
+            href="/"
+            className="mt-3 inline-flex min-h-[44px] items-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            {ACCEPT_DECLINE}
+          </Link>
+        </Chunk>
+      </main>
+      <Footer />
+    </div>
   );
 }

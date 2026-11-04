@@ -1,5 +1,6 @@
 import { Chunk, ChunkButton, Sticker } from "@/components/settle";
 import { usageLine, type LockState, type PlanView } from "@/lib/dashboard/plan";
+import { CLOSED_NOTE } from "@/lib/billing/view";
 
 // The usage half of the upgrade panel from the brief's T19: what the student
 // used this month and when it resets. With Stripe configured and billing on
@@ -32,12 +33,14 @@ export function PlanCard({
         Resets {view.resetsOn}
       </p>
       <div className="mt-5">
-        {billingOpen ? (
-          <ChunkButton tone="ink" render={<a href="/billing" />}>
-            See plans
-          </ChunkButton>
-        ) : (
-          <ChunkButton disabled>Coming soon</ChunkButton>
+        {/* Every state reaches /billing: Manage plan for Pro, See plans for
+            Free, and while paid plans are closed the same See plans link
+            with the honest note beside it, never a buy button. */}
+        <ChunkButton tone="ink" render={<a href="/billing" />}>
+          {billingOpen && view.planName === "Pro" ? "Manage plan" : "See plans"}
+        </ChunkButton>
+        {billingOpen ? null : (
+          <p className="mt-2 text-sm text-muted-foreground">{CLOSED_NOTE}</p>
         )}
       </div>
     </Chunk>

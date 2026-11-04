@@ -6,7 +6,10 @@
 export const ACCOUNT_TITLE = "Your account";
 
 export const ACCOUNT_YOU_HEADING = "You";
-export const ACCOUNT_PLAN_LABEL = "Plan";
+// The plan block near the top of the You card: the plan name and one link to
+// where plans are explained and changed.
+export const ACCOUNT_YOUR_PLAN_HEADING = "Your plan";
+export const ACCOUNT_PLAN_BILLING_LINK_LABEL = "Plan and billing";
 // Shown when the users row has no first name (the only name column it has).
 export const ACCOUNT_NAME_FALLBACK = "Signed in with your Telegram account";
 export const LOG_OUT_BUTTON_LABEL = "Log out";
@@ -36,11 +39,16 @@ export const WORD_NEEDED_BANNER =
   "Type DELETE in the box first, then tap Delete my account.";
 export const BOX_NEEDED_BANNER =
   "Tick the confirmation box first so we know you understand.";
+// The one plain how-to for cancelling a Stars subscription, shared by the
+// deletion banner below and the billing page's Stars line, so the steps are
+// never written two different ways.
+export const STARS_CANCEL_STEPS =
+  "open the Settle chat, tap the bot name, and cancel the subscription in Subscriptions settings";
 export const CANCEL_FIRST_STRIPE_BANNER =
   "Cancel your Pro plan on the Billing page first (Manage plan), then come back here so you are not charged again.";
 export const CANCEL_FIRST_STRIPE_LINK_LABEL = "Go to Billing";
 export const CANCEL_FIRST_STARS_BANNER =
-  "Your Pro plan runs through Telegram. Cancel it in Telegram: open the Settle chat, tap the bot name, and cancel the subscription in Subscriptions settings. Then come back here so you are not charged again.";
+  `Your Pro plan runs through Telegram. Cancel it in Telegram: ${STARS_CANCEL_STEPS}. Then come back here so you are not charged again.`;
 export const CANCEL_FIRST_OTHER_BANNER =
   "Your plan is still running. Let it run out first, then come back here.";
 export const DELETE_FAILED_BANNER =

@@ -20,18 +20,18 @@ export function Footer() {
           meet the 14px accessibility floor while the whole row still matches. */}
       <div className="flex flex-col gap-1 text-sm sm:flex-row sm:items-center sm:gap-6">
         <nav aria-label="Footer" className="flex flex-wrap gap-x-5">
-          <a
-            href="#how"
+          <Link
+            href="/#how"
             className="inline-flex items-center py-3 underline-offset-4 hover:underline sm:py-0"
           >
             How it works
-          </a>
-          <a
-            href="#pricing"
+          </Link>
+          <Link
+            href="/#pricing"
             className="inline-flex items-center py-3 underline-offset-4 hover:underline sm:py-0"
           >
             Pricing
-          </a>
+          </Link>
           <Link
             href="/guides"
             className="inline-flex items-center py-3 underline-offset-4 hover:underline sm:py-0"

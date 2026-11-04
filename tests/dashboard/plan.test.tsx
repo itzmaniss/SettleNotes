@@ -100,9 +100,13 @@ describe("PlanCard", () => {
     expect(html).toContain("1 of 1");
     expect(html).toContain("0 of 1");
     expect(html).toContain("Resets 1 Nov");
-    expect(html).toContain("Coming soon");
-    expect(html).toContain("disabled"); // a real disabled button, not a link
-    expect(html).not.toContain("<a "); // no checkout link hiding anywhere
+    // Closed billing: an honest note and a link to the plans page, never a
+    // buy button.
+    expect(html).toContain("See plans");
+    expect(html).toContain("Paid plans are not open yet.");
+    expect(html).toContain('href="/billing"');
+    expect(html).not.toContain("Coming soon");
+    expect(html).not.toMatch(/\sdisabled[=\s>]/);
   });
 
   test("billing open: the button becomes a /billing link", () => {
