@@ -255,3 +255,17 @@ The script refunds the Stars payment and marks the matching Stars subscription c
 ### PayNow, one time yearly
 
 - [ ] **[Manager]** Refund in the Stripe dashboard like a card payment. There is no renewal, so the `paynow:` subscriptions row runs out by itself; set it to canceled by hand if you want it closed sooner.
+
+## Google Calendar sync (Pro, off by default)
+
+The feature stays off until every step below is done. Switch CALENDAR_SYNC_ENABLED on last, after the test connect passes.
+
+- [ ] **[User]** In the Google Cloud console open a project (or create one) and enable the Calendar API.
+- [ ] **[User]** Configure the OAuth consent screen with the domain settlenotes.com and the privacy and terms links. Add the calendar.app.created scope. Add test users while the app is in testing; Google verification may apply before non test users can connect.
+- [ ] **[User]** Create an OAuth client of type Web with redirect URI https://settlenotes.com/api/calendar/callback. Copy the client id and the client secret.
+- [ ] **[Manager]** Apply `supabase/migrations/0006_calendar.sql` in the Supabase SQL editor, one file in one transaction.
+- [ ] **[Manager]** Set the five env values in Coolify with Literal ticked (leave CALENDAR_SYNC_ENABLED false for now): GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, CALENDAR_TOKEN_KEY (generate with `openssl rand -base64 32`), CALENDAR_CRON_SECRET (generate with `openssl rand -hex 32`). Restart the app.
+- [ ] **[Manager]** Add a Coolify scheduled task running every 10 minutes: `curl` against https://settlenotes.com/api/calendar/cron with the Authorization header carrying the CALENDAR_CRON_SECRET value. Confirm one run returns a JSON count line.
+- [ ] **[Manager]** Connect once from a Pro test account and confirm a calendar called Settle appears in that Google account with one event per open dated task. Move a deadline and confirm the event patches in place. Then disconnect and confirm the calendar is gone and the connection row with it.
+- [ ] **[User]** Counsel review first: switching the feature on shows new privacy text (the Google Calendar section). Ask counsel to review, and bump TERMS_VERSION in `lib/legal/version.ts` on that day so everyone is asked to accept again.
+- [ ] **[Manager]** Switch CALENDAR_SYNC_ENABLED to true last. Restart the app and reconnect the test account once more.

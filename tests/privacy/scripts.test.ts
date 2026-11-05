@@ -116,6 +116,8 @@ describe("delete-user run", () => {
     expect(text).toContain("usage_events 1");
     expect(text).toContain("pending_actions 1");
     expect(text).toContain("purchase_confirmations 1");
+    expect(text).toContain("calendar_connections 1");
+    expect(text).toContain("calendar_event_links 1");
     expect(text).toContain("login_tokens 1");
     expect(text).toContain("ai_calls 2");
     expect(text).toContain("stored files to remove: 3");

@@ -49,6 +49,7 @@ function report(overrides: Partial<EraseReport> = {}): EraseReport {
     filesRemoved: 1,
     eventsMatched: 0,
     eventsScrubbed: 0,
+    calendarCleanupAttempted: false,
     externalRecords: { stripe: [] },
     ...overrides,
   };

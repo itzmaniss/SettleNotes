@@ -18,12 +18,14 @@ const FULL_ENV: LegalTokenEnv = {
 };
 
 describe("legalTokens", () => {
-  test("returns exactly the eleven known tokens, all non empty", () => {
+  test("returns exactly the twelve known tokens, all non empty except the calendar section when off", () => {
     const tokens = legalTokens({ env: FULL_ENV, version: "2026-11-01" });
     expect(Object.keys(tokens).sort()).toEqual([...LEGAL_TOKEN_NAMES].sort());
     for (const name of LEGAL_TOKEN_NAMES) {
+      if (name === "calendar_section") continue;
       expect(tokens[name].length).toBeGreaterThan(0);
     }
+    expect(tokens.calendar_section).toBe("");
   });
 
   test("formats the effective date by hand", () => {

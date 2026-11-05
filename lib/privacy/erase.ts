@@ -4,6 +4,9 @@
 // tells the operator to simply run again; the next run re-lists what is left
 // and finishes the job.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { decryptToken } from "../calendar/crypto";
+import { isCalendarSyncEnabled } from "../calendar/flags";
+import { createGoogleClient } from "../calendar/google";
 import { fetchPaged } from "./query";
 import { allZero, countOwnedRows, nonzeroEntries, type OwnedCounts } from "./counts";
 import { activeSubscriptionBlockers, type SubscriptionBlocker } from "./blockers";
@@ -37,6 +40,10 @@ export type EraseReport = {
   filesRemoved: number;
   eventsMatched: number;
   eventsScrubbed: number;
+  // True when a calendar connection with an encrypted token existed and the
+  // feature was on, so the Google side cleanup was tried. Best effort only:
+  // the database erase below runs the same either way.
+  calendarCleanupAttempted: boolean;
   // References to records OUTSIDE this database, captured before the users
   // row goes, because afterwards nothing links the student to them. Stripe is
   // never contacted by the erase; the operator decides what to do there.
@@ -65,7 +72,95 @@ export type EraseDeps = {
   // passing it here lets the scrub find and minimise those rows too.
   telegramUserId?: number;
   now?: () => Date;
+  // Google side calendar cleanup. Defaults to the live feature switch and
+  // env when absent, so both the self serve path and the operator scripts
+  // get it without passing anything; tests inject fakes here.
+  calendar?: EraseCalendarDeps;
 };
+
+// Everything the Google side cleanup needs. The fetch is injected so tests
+// use a fake and no test ever touches the network.
+export type EraseCalendarDeps = {
+  enabled: () => boolean;
+  tokenKey: string | undefined;
+  clientId: string | undefined;
+  clientSecret: string | undefined;
+  fetchFn: typeof fetch;
+};
+
+function defaultCalendarDeps(): EraseCalendarDeps {
+  return {
+    enabled: () => isCalendarSyncEnabled(),
+    tokenKey: process.env.CALENDAR_TOKEN_KEY,
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    fetchFn: globalThis.fetch,
+  };
+}
+
+type CalendarConnectionPeek = {
+  google_calendar_id: string | null;
+  refresh_token_enc: string | null;
+};
+
+// Best effort Google side cleanup, run before the users row goes so the
+// connection is still readable. Returns true when a cleanup was tried: a
+// connection with an encrypted token existed and the feature was on. Every
+// failure path returns false or true without throwing, and nothing logged
+// here can carry a token or a Google response body.
+async function attemptCalendarCleanup(
+  client: SupabaseClient,
+  userId: string,
+  calendar: EraseCalendarDeps,
+): Promise<boolean> {
+  let on = false;
+  try {
+    on = calendar.enabled();
+  } catch {
+    return false;
+  }
+  if (!on) return false;
+  const { tokenKey, clientId, clientSecret } = calendar;
+  if (tokenKey == null || clientId == null || clientSecret == null) return false;
+  let connection: CalendarConnectionPeek | null = null;
+  try {
+    const { data, error } = await client
+      .from("calendar_connections")
+      .select("google_calendar_id,refresh_token_enc")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) return false;
+    connection = (data as CalendarConnectionPeek | null) ?? null;
+  } catch {
+    return false;
+  }
+  if (connection?.refresh_token_enc == null) return false;
+  try {
+    const refreshToken = decryptToken(connection.refresh_token_enc, tokenKey);
+    const google = createGoogleClient({ clientId, clientSecret, fetch: calendar.fetchFn });
+    let accessToken: string | null = null;
+    try {
+      accessToken = (await google.refreshAccessToken(refreshToken)).accessToken;
+    } catch {
+      accessToken = null;
+    }
+    if (accessToken != null && connection.google_calendar_id != null) {
+      try {
+        await google.deleteCalendar(accessToken, connection.google_calendar_id);
+      } catch {
+        // Already gone or unreachable: the revoke below still runs.
+      }
+    }
+    try {
+      await google.revokeToken(refreshToken);
+    } catch {
+      // Revocation is best effort by design.
+    }
+  } catch {
+    // A bad key or anything else: fall through to the cascade delete below.
+  }
+  return true;
+}
 
 export type EraseArgs = { userId: string; dryRun: boolean; force?: boolean };
 
@@ -121,6 +216,7 @@ export async function eraseUser(deps: EraseDeps, args: EraseArgs): Promise<Erase
       filesRemoved: 0,
       eventsMatched: 0,
       eventsScrubbed: 0,
+      calendarCleanupAttempted: false,
       externalRecords: { stripe: [] },
     };
   }
@@ -146,6 +242,7 @@ export async function eraseUser(deps: EraseDeps, args: EraseArgs): Promise<Erase
       filesRemoved: 0,
       eventsMatched: events.length,
       eventsScrubbed: 0,
+      calendarCleanupAttempted: false,
       externalRecords,
     };
   }
@@ -161,6 +258,7 @@ export async function eraseUser(deps: EraseDeps, args: EraseArgs): Promise<Erase
       filesRemoved: 0,
       eventsMatched: events.length,
       eventsScrubbed: 0,
+      calendarCleanupAttempted: false,
       externalRecords,
     };
   }
@@ -191,6 +289,7 @@ export async function eraseUser(deps: EraseDeps, args: EraseArgs): Promise<Erase
         filesRemoved,
         eventsMatched: events.length,
         eventsScrubbed: scrub.scrubbed,
+        calendarCleanupAttempted: false,
         externalRecords,
       },
       cause,
@@ -198,7 +297,16 @@ export async function eraseUser(deps: EraseDeps, args: EraseArgs): Promise<Erase
   }
   completed.push("storage");
 
-  // 4. The users row; every foreign key cascade does the rest.
+  // 4. The Google side calendar cleanup, before the users row goes while the
+  // connection is still readable. Best effort: it never throws, and the
+  // cascade below removes the rows whatever it reports.
+  const calendarCleanupAttempted = await attemptCalendarCleanup(
+    deps.client,
+    args.userId,
+    deps.calendar ?? defaultCalendarDeps(),
+  );
+
+  // 5. The users row; every foreign key cascade does the rest.
   try {
     const { error } = await deps.client.from("users").delete().eq("id", args.userId);
     if (error) throw new Error(error.message);
@@ -215,6 +323,7 @@ export async function eraseUser(deps: EraseDeps, args: EraseArgs): Promise<Erase
         filesRemoved: filesBefore.length,
         eventsMatched: events.length,
         eventsScrubbed: scrub.scrubbed,
+        calendarCleanupAttempted,
         externalRecords,
       },
       cause,
@@ -222,7 +331,7 @@ export async function eraseUser(deps: EraseDeps, args: EraseArgs): Promise<Erase
   }
   completed.push("delete_user");
 
-  // 5. Verify: zero rows everywhere and an empty storage prefix.
+  // 6. Verify: zero rows everywhere and an empty storage prefix.
   const after = await countOwnedRows(deps.client, args.userId);
   const filesAfter = await listStoredFiles(deps.storage, deps.bucket, args.userId);
   completed.push("verify");
@@ -242,6 +351,7 @@ export async function eraseUser(deps: EraseDeps, args: EraseArgs): Promise<Erase
       filesRemoved: filesBefore.length,
       eventsMatched: events.length,
       eventsScrubbed: scrub.scrubbed,
+      calendarCleanupAttempted,
       externalRecords,
       message: `verification found rows left over: ${rowsText || "none"}; files left over: ${filesAfter.length}`,
     };
@@ -259,6 +369,7 @@ export async function eraseUser(deps: EraseDeps, args: EraseArgs): Promise<Erase
     filesRemoved: filesBefore.length,
     eventsMatched: events.length,
     eventsScrubbed: scrub.scrubbed,
+    calendarCleanupAttempted,
     externalRecords,
   };
 }

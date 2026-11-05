@@ -164,6 +164,43 @@ describe("eraseUser", () => {
     expect(report.filesAfter).toBe(0);
   });
 
+  test("calendar rows are counted before the erase and zero after", async () => {
+    const tables = baseTables();
+    (tables.subscriptions ?? []).forEach((row) => {
+      if (row.user_id === USER_A) row.current_period_end = "2026-01-01T00:00:00.000Z";
+    });
+    const fake = makeFakeDb(tables, { objects: [] });
+    const report = await eraseUser(
+      { client: fake.client, storage: storageOf(fake), bucket: "uploads", now: NOW },
+      { userId: USER_A, dryRun: false },
+    );
+    expect(report.status).toBe("erased");
+    expect(report.before?.calendar_connections).toBe(1);
+    expect(report.before?.calendar_event_links).toBe(1);
+    expect(report.after?.calendar_connections).toBe(0);
+    expect(report.after?.calendar_event_links).toBe(0);
+    expect((fake.data.calendar_connections ?? []).filter((row) => row.user_id === USER_A)).toEqual([]);
+    expect((fake.data.calendar_event_links ?? []).filter((row) => row.user_id === USER_A)).toEqual([]);
+  });
+
+  test("verification fails loudly when a calendar row survives", async () => {
+    const tables = baseTables();
+    tables.users = (tables.users ?? []).filter((row) => row.id === USER_A);
+    tables.subscriptions = [];
+    const fake = makeFakeDb(tables, { objects: [], noCascade: true });
+    const report = await eraseUser(
+      { client: fake.client, storage: storageOf(fake), bucket: "uploads", now: NOW },
+      { userId: USER_A, dryRun: false },
+    );
+    expect(report.status).toBe("incomplete");
+    expect(report.before?.calendar_connections).toBe(1);
+    expect(report.before?.calendar_event_links).toBe(1);
+    expect(report.after?.calendar_connections).toBe(1);
+    expect(report.after?.calendar_event_links).toBe(1);
+    expect(report.message).toContain("calendar_connections 1");
+    expect(report.message).toContain("calendar_event_links 1");
+  });
+
   test("a database delete failure reports the step and keeps the storage results", async () => {
     const tables = baseTables();
     (tables.subscriptions ?? []).forEach((row) => {

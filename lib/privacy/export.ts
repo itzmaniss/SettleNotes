@@ -17,7 +17,7 @@ export const EXPORT_NOTE =
   "Produced by the operator of this Settle deployment on the date in exported_at. " +
   "Included: the account row, uploads with their text and classification, tasks, task events, " +
   "starters, weak spots, subscriptions, usage events, pending actions, purchase confirmations, " +
-  "a summary of AI usage, " +
+  "a summary of AI usage, the calendar connection and calendar event links, " +
   "and the list of files stored for this account. " +
   "Not included: login tokens and other security material, raw AI prompts and responses, " +
   "other students' data, signed file links, and the operator side payment records, which are " +
@@ -121,6 +121,25 @@ export type PurchaseConfirmationExportRow = {
   confirmed_at: string;
 };
 
+// One row per connected student at most. The encrypted token and the sync
+// lock never leave the database: they are security material, not the
+// student's own data.
+export type CalendarConnectionExportRow = {
+  user_id: string;
+  google_calendar_id: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+// The link carries only what the student can already see: which task points
+// at which calendar event, and when. The content hash stays inside.
+export type CalendarEventLinkExportRow = {
+  task_id: string;
+  google_event_id: string;
+  synced_at: string;
+};
+
 export type AiCallExportRow = {
   purpose: string;
   input_tokens: number | null;
@@ -153,6 +172,8 @@ export type PrivacyExport = {
   usage_events: UsageEventExportRow[];
   pending_actions: PendingActionExportRow[];
   purchase_confirmations: PurchaseConfirmationExportRow[];
+  calendar_connection: CalendarConnectionExportRow | null;
+  calendar_event_links: CalendarEventLinkExportRow[];
   ai_calls_summary: AiCallsExportSummary;
   files: string[];
 };
@@ -312,6 +333,22 @@ export async function buildExport(
     eqUser,
     "confirmed_at",
   );
+  // The calendar connection, if any: one row at most. The select names
+  // exactly the exported columns, so the encrypted token and the lock stay
+  // in the database.
+  const connectionRows = await fetchPaged<CalendarConnectionExportRow>(
+    client,
+    "calendar_connections",
+    "user_id,google_calendar_id,status,created_at,updated_at",
+    eqUser,
+  );
+  const eventLinks = await fetchPaged<CalendarEventLinkExportRow>(
+    client,
+    "calendar_event_links",
+    "task_id,google_event_id,synced_at",
+    eqUser,
+    "synced_at",
+  );
   // Only the aggregate is exported, never the individual AI call rows.
   const aiRows = await fetchPaged<AiCallExportRow>(
     client,
@@ -334,6 +371,8 @@ export async function buildExport(
     usage_events: usageEvents,
     pending_actions: pendingActions,
     purchase_confirmations: purchaseConfirmations,
+    calendar_connection: connectionRows[0] ?? null,
+    calendar_event_links: eventLinks,
     ai_calls_summary: summarizeAiCallsForExport(aiRows),
     files,
   };

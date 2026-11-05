@@ -76,8 +76,18 @@ Acceptance (what is measured today): the understand suite ships 16 fixtures in `
 - Status: all of it ships behind `BILLING_ENABLED=false`, which treats everyone as Pro with nothing blocked; Pro is not on sale yet.
 - Privacy tooling: `scripts/delete-user.ts` (dry-run first) and `scripts/export-user.ts`; where every kind of student data lives and how it is removed is `docs/DATA-MAP.md`.
 
+### F8. Google Calendar sync (Pro, off by default)
+- Pro students can connect Google Calendar from the Account page. Settle keeps a separate calendar called Settle in their own Google account up to date with open task titles, course names and deadlines, and nothing else in that account.
+- Off by default: the feature runs only while `CALENDAR_SYNC_ENABLED=true` with the Google client id and secret, the token key and the cron secret all set. While off, every calendar route answers 404 and the Account page shows no Calendar block.
+- After a task change the sync runs in the background; a scheduled task also sweeps every ten minutes. A deadline move patches the matching event, a deleted or dateless task removes it.
+- Disconnect on the Account page deletes the Settle calendar at Google, ends Settle's access and removes the records. Deleting the account does the same.
+
+Acceptance:
+- A Pro student connects and a calendar called Settle appears in their Google account with one event per open dated task.
+- Moving a deadline patches the event in place; disconnecting removes the calendar and revokes access.
+
 ## Non-goals (for now)
-Group chat membership (bot reads only what's forwarded to it in DMs), calendar sync, multi-language UI, mobile app, teacher accounts.
+Group chat membership (bot reads only what's forwarded to it in DMs), multi-language UI, mobile app, teacher accounts.
 
 ## Demo script (target 2-3 min, check hackathon limit)
 1. Pain (15s): a chaotic 30-message Singlish group chat, a 30-page brief, a page of math working.

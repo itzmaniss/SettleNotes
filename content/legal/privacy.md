@@ -58,6 +58,8 @@ If you are aged 15 to 17, we try to write in plain language, and you can usually
 
 The dashboard uses two cookies, and both are needed for it to work. One keeps you logged in and expires after seven days. The other is used for ten minutes while you decide whether to accept the Terms. We do not use advertising or analytics cookies, and we do not run analytics or advertising scripts. The login page loads a script from Telegram so you can log in with Telegram, and Stripe's pages are run by Stripe, so those two companies can see that you visited them.
 
+{{calendar_section}}
+
 ## 7. Contact
 
 Privacy questions and requests: {{support_email}}.

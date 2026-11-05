@@ -21,11 +21,15 @@ const PAGE_ENV = {
 const realContent = await import("@/lib/legal/content");
 const realLoad = realContent.loadLegalDocument;
 
+// An explicit deps argument is forwarded untouched, so other test files that
+// load with injected sources and envs keep working whatever the file order;
+// only the no-deps app path gets the hand made env.
 mock.module("@/lib/legal/content", () => ({
   LEGAL_KEYS: realContent.LEGAL_KEYS,
   readLegalSource: realContent.readLegalSource,
   loadAllLegalSources: realContent.loadAllLegalSources,
-  loadLegalDocument: (key: LegalKey) => realLoad(key, { env: PAGE_ENV }),
+  loadLegalDocument: (key: LegalKey, deps?: Parameters<typeof realLoad>[1]) =>
+    realLoad(key, deps ?? { env: PAGE_ENV }),
 }));
 
 const termsModule = await import("@/app/terms/page");

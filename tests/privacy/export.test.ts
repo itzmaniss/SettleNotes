@@ -22,6 +22,8 @@ describe("buildExport", () => {
       [
         "account",
         "ai_calls_summary",
+        "calendar_connection",
+        "calendar_event_links",
         "exported_at",
         "files",
         "note",
@@ -106,7 +108,7 @@ describe("buildExport", () => {
     const fake = makeFakeDb(baseTables(), { objects: BASE_OBJECTS });
     await buildExport(fake.client, USER_A, { bucket: "uploads", now: NOW });
     const selects = fake.ops.filter((op): op is Extract<(typeof fake.ops)[number], { kind: "select" }> => op.kind === "select");
-    expect(selects.length).toBe(11);
+    expect(selects.length).toBe(13);
     for (const op of selects) {
       const hit = op.filters.some(
         (f) =>
@@ -139,5 +141,94 @@ describe("buildExport", () => {
     const fake = makeFakeDb(baseTables(), { objects: BASE_OBJECTS });
     const data = await buildExport(fake.client, USER_A, { bucket: "uploads", now: NOW });
     expect(JSON.stringify(data)).not.toContain("tgfile-secret");
+  });
+});
+
+describe("buildExport calendar sections", () => {
+  const TOKEN_BLOB = "v1.encryption-secret-blob";
+  const OTHER_CALENDAR = "other-student-calendar";
+
+  function tablesWithCalendar() {
+    const tables = baseTables();
+    tables.calendar_connections = [
+      {
+        user_id: USER_A,
+        google_calendar_id: "settle-calendar-A",
+        refresh_token_enc: TOKEN_BLOB,
+        status: "active",
+        sync_lock_until: "2026-10-20T00:05:00.000Z",
+        created_at: "2026-10-20T00:00:00.000Z",
+        updated_at: "2026-10-20T00:00:00.000Z",
+      },
+      {
+        user_id: USER_B,
+        google_calendar_id: OTHER_CALENDAR,
+        refresh_token_enc: "v1.other-secret-blob",
+        status: "active",
+        sync_lock_until: null,
+        created_at: "2026-10-21T00:00:00.000Z",
+        updated_at: "2026-10-21T00:00:00.000Z",
+      },
+    ];
+    tables.calendar_event_links = [
+      {
+        task_id: "cccc0000-0000-4000-8000-000000000001",
+        user_id: USER_A,
+        google_event_id: "google-event-A1",
+        synced_hash: "content-hash-secret",
+        synced_at: "2026-10-20T01:00:00.000Z",
+      },
+      {
+        task_id: TASK_B1,
+        user_id: USER_B,
+        google_event_id: "google-event-B1",
+        synced_hash: "other-hash-secret",
+        synced_at: "2026-10-21T01:00:00.000Z",
+      },
+    ];
+    return tables;
+  }
+
+  test("the connection and links export with safe columns only", async () => {
+    const fake = makeFakeDb(tablesWithCalendar(), { objects: BASE_OBJECTS });
+    const data = await buildExport(fake.client, USER_A, { bucket: "uploads", now: NOW });
+    expect(data.calendar_connection).toEqual({
+      user_id: USER_A,
+      google_calendar_id: "settle-calendar-A",
+      status: "active",
+      created_at: "2026-10-20T00:00:00.000Z",
+      updated_at: "2026-10-20T00:00:00.000Z",
+    });
+    expect(data.calendar_event_links).toEqual([
+      {
+        task_id: "cccc0000-0000-4000-8000-000000000001",
+        google_event_id: "google-event-A1",
+        synced_at: "2026-10-20T01:00:00.000Z",
+      },
+    ]);
+  });
+
+  test("the encrypted token, the lock and the content hash never appear anywhere", async () => {
+    const fake = makeFakeDb(tablesWithCalendar(), { objects: BASE_OBJECTS });
+    const data = await buildExport(fake.client, USER_A, { bucket: "uploads", now: NOW });
+    const json = JSON.stringify(data);
+    expect(json).not.toContain(TOKEN_BLOB);
+    expect(json).not.toContain("refresh_token_enc");
+    expect(json).not.toContain("sync_lock_until");
+    expect(json).not.toContain("synced_hash");
+    expect(json).not.toContain("content-hash-secret");
+    // The other student's calendar never leaks into this export.
+    expect(json).not.toContain(OTHER_CALENDAR);
+    expect(json).not.toContain("google-event-B1");
+  });
+
+  test("no connection exports as null and an empty link list", async () => {
+    const tables = baseTables();
+    tables.calendar_connections = [];
+    tables.calendar_event_links = [];
+    const fake = makeFakeDb(tables, { objects: BASE_OBJECTS });
+    const data = await buildExport(fake.client, USER_A, { bucket: "uploads", now: NOW });
+    expect(data.calendar_connection).toBeNull();
+    expect(data.calendar_event_links).toEqual([]);
   });
 });

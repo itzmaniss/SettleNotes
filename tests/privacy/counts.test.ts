@@ -19,6 +19,8 @@ const ZERO_COUNTS: OwnedCounts = {
   usage_events: 0,
   pending_actions: 0,
   purchase_confirmations: 0,
+  calendar_connections: 0,
+  calendar_event_links: 0,
   login_tokens: 0,
   ai_calls: 0,
 };
@@ -37,6 +39,8 @@ describe("countOwnedRows", () => {
       usage_events: 1,
       pending_actions: 1,
       purchase_confirmations: 1,
+      calendar_connections: 1,
+      calendar_event_links: 1,
       login_tokens: 1,
       ai_calls: 2,
     });
@@ -51,6 +55,8 @@ describe("countOwnedRows", () => {
     expect(countsB.task_events).toBe(1);
     expect(countsB.starters).toBe(1);
     expect(countsB.purchase_confirmations).toBe(1);
+    expect(countsB.calendar_connections).toBe(1);
+    expect(countsB.calendar_event_links).toBe(1);
   });
 
   test("a task with several events counts all of them for the right user", async () => {

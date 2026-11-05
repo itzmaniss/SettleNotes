@@ -125,6 +125,10 @@ export function makeFakeDb(tables: Record<string, Row[]>, opts: FakeOptions = {}
       (r) => r.user_id !== userId,
     );
     data.login_tokens = (data.login_tokens ?? []).filter((r) => r.user_id !== userId);
+    data.calendar_connections = (data.calendar_connections ?? []).filter((r) => r.user_id !== userId);
+    data.calendar_event_links = (data.calendar_event_links ?? []).filter(
+      (r) => r.user_id !== userId,
+    );
     for (const row of data.ai_calls ?? []) {
       if (row.user_id === userId) row.user_id = null;
     }

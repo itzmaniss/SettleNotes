@@ -31,6 +31,8 @@ const sampleExport: PrivacyExport = {
   usage_events: [],
   pending_actions: [],
   purchase_confirmations: [],
+  calendar_connection: null,
+  calendar_event_links: [],
   ai_calls_summary: {
     count: 0,
     total_input_tokens: 0,

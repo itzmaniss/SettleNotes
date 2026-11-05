@@ -46,6 +46,11 @@ All configuration is runtime env, read from one file. Nothing secret goes into t
 | LEGAL_BUSINESS_UEN | no | UEN, the Singapore business registration number issued by ACRA. Blank values become visible `[[MISSING: ...]]` markers; run the same check before launch. |
 | LEGAL_SUPPORT_EMAIL | no | Support inbox shown on every legal page and used for privacy and refund requests. |
 | LEGAL_SUPABASE_REGION | no | Supabase project region named in the privacy notice (e.g. `ap-southeast-1`). |
+| CALENDAR_SYNC_ENABLED | no | `false` unless set to `true`. With anything but all five calendar values set, the calendar sync stays off; set it `true` last, only after the Google Cloud setup in the Google Calendar sync section of `docs/LAUNCH.md`. |
+| GOOGLE_CLIENT_ID | no | OAuth client id from Google Cloud for the calendar sync. Blank keeps every calendar surface off. |
+| GOOGLE_CLIENT_SECRET | no | OAuth client secret from Google Cloud. Blank keeps every calendar surface off. |
+| CALENDAR_TOKEN_KEY | no | Random 32 bytes as base64 (`openssl rand -base64 32`). Encrypts the stored Google refresh tokens; losing it means stored connections can never decrypt again. |
+| CALENDAR_CRON_SECRET | no | Random string (`openssl rand -hex 32`). The scheduled task sends it as the cron Authorization header. |
 
 Generate the two secrets:
 
@@ -75,8 +80,19 @@ The sample `deploy/docker-compose.yml` points at `/opt/settle.env`. Change that 
    - `supabase/migrations/0003_pending_actions.sql`
    - `supabase/migrations/0004_terms_acceptance.sql`
    - `supabase/migrations/0005_purchase_confirmations.sql`
+   - `supabase/migrations/0006_calendar.sql` (only needed when the Google Calendar sync in `docs/LAUNCH.md` is wanted)
 
-   0002 creates the billing tables that sit dormant behind `BILLING_ENABLED=false` (the usage ledger writes from day one), so apply all of them. 0004 adds the terms acceptance columns the bot and web gates require. 0005 stores the purchase confirmations that must exist before any Pro payment, on Telegram and on the web. Alternative: `supabase link` then `supabase db push` using `SUPABASE_DB_URL`.
+   0002 creates the billing tables that sit dormant behind `BILLING_ENABLED=false` (the usage ledger writes from day one), so apply all of them. 0004 adds the terms acceptance columns the bot and web gates require. 0005 stores the purchase confirmations that must exist before any Pro payment, on Telegram and on the web. 0006 creates the calendar tables; skip it while the feature stays off. Alternative: `supabase link` then `supabase db push` using `SUPABASE_DB_URL`.
+
+## Calendar sync cron (only when the feature is on)
+
+Every ten minutes, call the cron route with the cron secret in the Authorization header:
+
+```
+*/10 * * * * curl -s -H "Authorization: Bearer $CALENDAR_CRON_SECRET" https://settle.example.com/api/calendar/cron
+```
+
+A healthy run answers a small JSON count line (`users`, `created`, `patched`, `removed`, `failed`). Without the right secret the route answers 401; with the feature off it answers 404. Use the production domain in place of `settle.example.com`.
 2. Create the private `uploads` bucket. The SQL way, in the same editor:
 
 ```sql

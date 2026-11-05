@@ -309,6 +309,42 @@ export function baseTables(): Record<string, Row[]> {
         confirmed_at: "2026-10-05T04:00:00.000Z",
       },
     ],
+    calendar_connections: [
+      {
+        user_id: USER_A,
+        google_calendar_id: "settle-calendar-A",
+        refresh_token_enc: "v1.fixture-secret-A",
+        status: "active",
+        sync_lock_until: null,
+        created_at: "2026-10-03T04:00:00.000Z",
+        updated_at: "2026-10-03T04:00:00.000Z",
+      },
+      {
+        user_id: USER_B,
+        google_calendar_id: "settle-calendar-B",
+        refresh_token_enc: "v1.fixture-secret-B",
+        status: "active",
+        sync_lock_until: null,
+        created_at: "2026-10-05T04:00:00.000Z",
+        updated_at: "2026-10-05T04:00:00.000Z",
+      },
+    ],
+    calendar_event_links: [
+      {
+        task_id: TASK_A1,
+        user_id: USER_A,
+        google_event_id: "google-event-A1",
+        synced_hash: "hash-A1",
+        synced_at: "2026-10-03T04:00:00.000Z",
+      },
+      {
+        task_id: TASK_B1,
+        user_id: USER_B,
+        google_event_id: "google-event-B1",
+        synced_hash: "hash-B1",
+        synced_at: "2026-10-05T04:00:00.000Z",
+      },
+    ],
     ai_calls: [
       {
         id: "aaaa1111-0000-4000-8000-000000000001",
