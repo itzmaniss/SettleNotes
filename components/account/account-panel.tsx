@@ -2,6 +2,18 @@ import Link from "next/link";
 import { Chunk, ChunkButton } from "@/components/settle";
 import { ACCOUNT_NAME_FALLBACK } from "@/lib/account/web-copy";
 import type { AccountPageView } from "@/lib/account/view";
+import type { CalendarView } from "@/lib/calendar/view";
+import {
+  CALENDAR_CONNECT_AGAIN_LABEL,
+  CALENDAR_CONNECTED_BODY,
+  CALENDAR_CONNECT_LABEL,
+  CALENDAR_DISCONNECT_LABEL,
+  CALENDAR_HEADING,
+  CALENDAR_NOT_CONNECTED_BODY,
+  CALENDAR_PRO_REQUIRED_BODY,
+  CALENDAR_RECONNECT_BODY,
+  CALENDAR_SEE_PLANS_LABEL,
+} from "@/lib/calendar/web-copy";
 import {
   ACCOUNT_DELETE_BODY,
   ACCOUNT_DELETE_BUTTON_LABEL,
@@ -30,9 +42,11 @@ export type AccountPanelProps = {
   view: AccountPageView;
   logOut: (formData: FormData) => void | Promise<void>;
   deleteAccount: (formData: FormData) => void | Promise<void>;
+  // Null when the calendar sync feature is off: the block stays hidden.
+  calendar?: CalendarView | null;
 };
 
-export function AccountPanel({ view, logOut, deleteAccount }: AccountPanelProps) {
+export function AccountPanel({ view, logOut, deleteAccount, calendar }: AccountPanelProps) {
   return (
     <div className="pt-4">
       <h1 className="font-display text-3xl font-extrabold tracking-tight">{ACCOUNT_TITLE}</h1>
@@ -108,6 +122,67 @@ export function AccountPanel({ view, logOut, deleteAccount }: AccountPanelProps)
           </ChunkButton>
         </Chunk>
       </section>
+
+      {calendar !== null && calendar !== undefined && (
+        <section aria-labelledby="calendar-heading" className="mt-8">
+          <p
+            id="calendar-heading"
+            className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground"
+          >
+            {CALENDAR_HEADING}
+          </p>
+          {calendar.banner !== null && (
+            <Chunk tone="pop" role="status" className="mt-3 p-4 text-sm font-medium">
+              {calendar.banner}
+            </Chunk>
+          )}
+          <Chunk className="mt-3 p-5">
+            {calendar.state === "pro_required" && (
+              <>
+                <p className="text-sm leading-relaxed">{CALENDAR_PRO_REQUIRED_BODY}</p>
+                <Link
+                  href="/billing"
+                  className="mt-4 inline-flex min-h-[44px] items-center text-sm font-semibold underline underline-offset-4"
+                >
+                  {CALENDAR_SEE_PLANS_LABEL}
+                </Link>
+              </>
+            )}
+            {calendar.state === "not_connected" && (
+              <>
+                <p className="text-sm leading-relaxed">{CALENDAR_NOT_CONNECTED_BODY}</p>
+                <Link
+                  href="/api/calendar/connect"
+                  className="mt-4 inline-flex min-h-[44px] items-center text-sm font-semibold underline underline-offset-4"
+                >
+                  {CALENDAR_CONNECT_LABEL}
+                </Link>
+              </>
+            )}
+            {calendar.state === "connected" && (
+              <>
+                <p className="text-sm leading-relaxed">{CALENDAR_CONNECTED_BODY}</p>
+                <form action="/api/calendar/disconnect" method="post" className="mt-4">
+                  <ChunkButton tone="ink" type="submit" className="w-full justify-center">
+                    {CALENDAR_DISCONNECT_LABEL}
+                  </ChunkButton>
+                </form>
+              </>
+            )}
+            {calendar.state === "needs_reconnect" && (
+              <>
+                <p className="text-sm leading-relaxed">{CALENDAR_RECONNECT_BODY}</p>
+                <Link
+                  href="/api/calendar/connect"
+                  className="mt-4 inline-flex min-h-[44px] items-center text-sm font-semibold underline underline-offset-4"
+                >
+                  {CALENDAR_CONNECT_AGAIN_LABEL}
+                </Link>
+              </>
+            )}
+          </Chunk>
+        </section>
+      )}
 
       <section aria-labelledby="delete-heading" className="mt-8">
         <p

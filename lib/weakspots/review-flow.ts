@@ -29,6 +29,7 @@ import {
 import type { ReviewQuizQuestion, LoadReviewQuestionsArgs } from "./questions";
 import type { ReviewCheckArgs, ReviewCheckResult } from "./review-answer";
 import { scheduleReview, scheduleReviewAfterQuizSuccess } from "./schedule";
+import { triggerCalendarSync } from "@/lib/calendar/trigger";
 
 export type ReviewFlowDeps = {
   store: ReviewQuizStore;
@@ -306,6 +307,7 @@ async function completeAndReschedule(
     evidence,
   });
   await deps.setWeakSpotNextReview(userId, session.weakSpotId, new Date(schedule.dueAt));
+  void triggerCalendarSync(userId);
 }
 
 // ---- real deps ---------------------------------------------------------------

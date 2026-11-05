@@ -88,6 +88,16 @@ export function createCalendarQueries(client: SupabaseClient) {
       if (error) throwCalendar("deleteConnection", error);
     },
 
+    async listActiveConnections(limit: number): Promise<CalendarConnectionRow[]> {
+      const { data, error } = await client
+        .from("calendar_connections")
+        .select()
+        .eq("status", "active")
+        .limit(limit);
+      if (error) throwCalendar("listActiveConnections", error);
+      return (data ?? []) as CalendarConnectionRow[];
+    },
+
     async claimSyncLock(userId: string, now: Date, ttlMs: number): Promise<boolean> {
       const until = new Date(now.getTime() + ttlMs).toISOString();
       const { data, error } = await client
@@ -140,6 +150,14 @@ export function createCalendarQueries(client: SupabaseClient) {
       const { error } = await client.from("calendar_event_links").delete().eq("task_id", taskId);
       if (error) throwCalendar("deleteLink", error);
     },
+
+    async deleteLinksForUser(userId: string): Promise<void> {
+      const { error } = await client
+        .from("calendar_event_links")
+        .delete()
+        .eq("user_id", userId);
+      if (error) throwCalendar("deleteLinksForUser", error);
+    },
   };
 }
 
@@ -173,6 +191,14 @@ export function upsertLink(i: UpsertLinkInput): Promise<CalendarEventLinkRow> {
 
 export function deleteLink(taskId: string): Promise<void> {
   return createCalendarQueries(getSupabase()).deleteLink(taskId);
+}
+
+export function deleteLinksForUser(userId: string): Promise<void> {
+  return createCalendarQueries(getSupabase()).deleteLinksForUser(userId);
+}
+
+export function listActiveConnections(limit: number): Promise<CalendarConnectionRow[]> {
+  return createCalendarQueries(getSupabase()).listActiveConnections(limit);
 }
 
 export function claimSyncLock(userId: string, now: Date, ttlMs: number): Promise<boolean> {

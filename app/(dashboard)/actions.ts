@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSessionUser } from "@/lib/auth/session";
+import { triggerCalendarSync } from "@/lib/calendar/trigger";
 import { runSetTaskDone, runToggleChecklistItem } from "@/lib/dashboard/checklist";
 import type { ActionResult } from "@/lib/dashboard/types";
 import {
@@ -59,6 +60,7 @@ export async function setTaskDone(taskId: string, done: boolean): Promise<Action
   if (result.ok) {
     revalidatePath("/dashboard");
     revalidatePath(`/tasks/${parsed.data.taskId}`);
+    void triggerCalendarSync(userId);
   }
   return result;
 }

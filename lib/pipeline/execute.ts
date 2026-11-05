@@ -8,6 +8,7 @@ import type {
 } from "@/lib/db/queries";
 import type { TaskRow } from "@/lib/db/types";
 import type { Op, ReconcileAction, TaskFields } from "@/lib/pipeline/reconcile";
+import { triggerCalendarSync } from "@/lib/calendar/trigger";
 import {
   insertTask as realInsertTask,
   insertTaskEvent as realInsertTaskEvent,
@@ -99,5 +100,8 @@ export async function executeOps(
     }
   }
 
+  if (result.created.length > 0 || result.updated.length > 0 || result.completed.length > 0) {
+    void triggerCalendarSync(ctx.userId);
+  }
   return result;
 }

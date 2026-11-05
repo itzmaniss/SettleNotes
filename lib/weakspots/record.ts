@@ -23,6 +23,7 @@ import type { StarterRow, TaskRow, UserRow, WeakSpotRow } from "@/lib/db/types";
 import { MATH_TOPIC_LABELS, ReviewPracticeSchema, type MathDiagnosis } from "@/lib/starters/types";
 import { findOpenReviewTask as realFindOpenReviewTask, setWeakSpotNextReview as realSetWeakSpotNextReview } from "./queries";
 import { rememberRecordedReviewTask } from "./review-flow";
+import { triggerCalendarSync } from "@/lib/calendar/trigger";
 import { reviewReply, scheduleReview } from "./schedule";
 
 export type WeakSpotRecorderDeps = {
@@ -62,6 +63,7 @@ export async function recordWeakSpot(
   });
   const schedule = scheduleReview(row.occurrences, now);
   await deps.setWeakSpotNextReview(user.id, row.id, new Date(schedule.dueAt));
+  void triggerCalendarSync(user.id);
 
   // Reschedule the existing open review instead of stacking duplicates; the
   // new misconception detail rides along as the event evidence.

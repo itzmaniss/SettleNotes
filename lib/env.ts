@@ -98,6 +98,13 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  // Google Calendar sync (Pro only). All optional: blank or missing keeps
+  // every calendar surface hidden, same as the LEGAL_ names below.
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  CALENDAR_TOKEN_KEY: z.string().optional(),
+  CALENDAR_SYNC_ENABLED: z.string().optional(),
+  CALENDAR_CRON_SECRET: z.string().optional(),
   // Identity shown on the legal pages (content/legal/*.md tokens). Optional:
   // a blank or missing value becomes a visible [[MISSING: VAR]] marker in the
   // pages instead of failing startup; scripts/check-legal.ts reports it.

@@ -9,6 +9,7 @@ export type RecordedCall = {
   payload: unknown;
   upsertOptions: Record<string, unknown> | undefined;
   selectColumns: string | undefined;
+  limitCount: number | undefined;
   filters: { op: string; column: string; value: unknown }[];
 };
 
@@ -22,6 +23,7 @@ export function makeFakeClient(replyFor: (call: RecordedCall) => FakeReply): Sup
       payload: undefined,
       upsertOptions: undefined,
       selectColumns: undefined,
+      limitCount: undefined,
       filters: [],
     };
 
@@ -68,6 +70,10 @@ export function makeFakeClient(replyFor: (call: RecordedCall) => FakeReply): Sup
       },
       or(value: string) {
         call.filters.push({ op: "or", column: "or", value });
+        return builder;
+      },
+      limit(n: number) {
+        call.limitCount = n;
         return builder;
       },
       single() {

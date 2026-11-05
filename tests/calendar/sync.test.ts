@@ -30,6 +30,15 @@ class StatefulFakeGoogle implements GoogleCalendarClient {
     return { accessToken: "at-1", expiresIn: 3600 };
   }
 
+  async exchangeCode(): Promise<{ accessToken: string; refreshToken: string | null }> {
+    this.calls.push("exchange");
+    return { accessToken: "at-1", refreshToken: "rt-1" };
+  }
+
+  async revokeToken(): Promise<void> {
+    this.calls.push("revoke");
+  }
+
   async createCalendar(accessToken: string, name: string): Promise<{ id: string }> {
     void accessToken;
     this.calls.push("createCalendar");
@@ -76,6 +85,12 @@ class StatefulFakeGoogle implements GoogleCalendarClient {
     this.calls.push("delete");
     if (!this.events.has(eventId)) throw new GoogleError("gone", 404, "deleteEvent");
     this.events.delete(eventId);
+  }
+
+  async deleteCalendar(accessToken: string, calendarId: string): Promise<void> {
+    void accessToken;
+    this.calls.push("deleteCalendar");
+    this.calendars.delete(calendarId);
   }
 }
 

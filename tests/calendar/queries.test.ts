@@ -154,6 +154,37 @@ describe("calendar queries", () => {
     expect(seen[0].filters).toEqual([{ op: "eq", column: "user_id", value: "user-1" }]);
   });
 
+  test("listActiveConnections filters active and passes the limit", async () => {
+    const seen: RecordedCall[] = [];
+    const q = createCalendarQueries(
+      makeFakeClient((c) => {
+        seen.push(c);
+        return { data: [CONNECTION] };
+      })
+    );
+    expect(await q.listActiveConnections(200)).toEqual([CONNECTION]);
+    expect(seen[0].table).toBe("calendar_connections");
+    expect(seen[0].filters).toEqual([{ op: "eq", column: "status", value: "active" }]);
+    expect(seen[0].limitCount).toBe(200);
+
+    const empty = createCalendarQueries(makeFakeClient(() => ({ data: null })));
+    expect(await empty.listActiveConnections(200)).toEqual([]);
+  });
+
+  test("deleteLinksForUser scopes the delete by user", async () => {
+    const seen: RecordedCall[] = [];
+    const q = createCalendarQueries(
+      makeFakeClient((c) => {
+        seen.push(c);
+        return { data: null };
+      })
+    );
+    await q.deleteLinksForUser("user-1");
+    expect(seen[0].method).toBe("delete");
+    expect(seen[0].table).toBe("calendar_event_links");
+    expect(seen[0].filters).toEqual([{ op: "eq", column: "user_id", value: "user-1" }]);
+  });
+
   test("supabase failures throw a clear calendar error", async () => {
     const failing = (client: SupabaseClient) => createCalendarQueries(client);
     const bad = makeFakeClient(() => ({ error: { code: "42501", message: "denied" } }));

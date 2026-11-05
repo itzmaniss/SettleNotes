@@ -6,6 +6,7 @@ import type { InsertTaskEventInput, UpdateTaskPatch } from "@/lib/db/queries";
 import type { TaskRow, UserRow } from "@/lib/db/types";
 import { sortByPriority } from "@/lib/pipeline/priority";
 import type { RateLimitCheck } from "@/lib/telegram/limits";
+import { triggerCalendarSync } from "@/lib/calendar/trigger";
 import { quizRateLimitedReply } from "@/lib/telegram/replies";
 import {
   createReviewFlowDeps,
@@ -155,6 +156,7 @@ export function createDoneCommand(deps: Partial<DoneCommandDeps> = {}) {
         after: { status: "done" },
         evidence: "marked done in chat",
       });
+      void triggerCalendarSync(user.id);
       const next = sortByPriority(tasks.filter((t) => t.id !== target.id), now())[0] ?? null;
       await replyQuietly(
         ctx,

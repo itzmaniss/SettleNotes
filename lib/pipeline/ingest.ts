@@ -18,6 +18,7 @@ import { env } from "@/lib/env";
 import type { ConversationTurn } from "@/lib/pipeline/conversation";
 import { dueLocalToUtc, utcToSgtLocal } from "@/lib/pipeline/dates";
 import { executeOps, type ExecuteResult } from "@/lib/pipeline/execute";
+import { triggerCalendarSync } from "@/lib/calendar/trigger";
 import {
   planReconcile,
   type OpenTaskLite,
@@ -289,6 +290,7 @@ export async function ingestContent(deps: IngestDeps, input: IngestInput): Promi
   // fold it into the created list so the reply shows it like any other task.
   const hasWrites =
     created.length > 0 || result.updated.length > 0 || result.completed.length > 0;
+  if (hasWrites) void triggerCalendarSync(input.user.id);
   if (!hasWrites && clarifyFallbacks.length === 0 && pendingPrompts.length === 0) {
     return { kind: "nothing", clarification: output.needs_clarification, answer: output.answer_to_student };
   }

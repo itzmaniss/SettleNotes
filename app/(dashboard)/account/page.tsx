@@ -6,13 +6,20 @@ import { getPlanForUser } from "@/lib/billing/entitlements";
 import { PLANS, type PlanId } from "@/lib/billing/plans";
 import { buildAccountPageView } from "@/lib/account/view";
 import { AccountPanel } from "@/components/account/account-panel";
+import { isCalendarSyncEnabled } from "@/lib/calendar/flags";
+import { getConnection } from "@/lib/calendar/queries";
+import { buildCalendarView, type CalendarView } from "@/lib/calendar/view";
 import { deleteAccount, logOut } from "./actions";
 
 export const metadata: Metadata = {
   title: "Your account",
 };
 
-type SearchParams = { status?: string | string[]; kind?: string | string[] };
+type SearchParams = {
+  status?: string | string[];
+  kind?: string | string[];
+  calendar?: string | string[];
+};
 
 function firstParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -45,5 +52,21 @@ export default async function AccountPage({
     cancelKind: firstParam(params.kind),
   });
 
-  return <AccountPanel view={view} logOut={logOut} deleteAccount={deleteAccount} />;
+  let calendar: CalendarView | null = null;
+  if (isCalendarSyncEnabled()) {
+    let status: "active" | "needs_reconnect" | null = null;
+    try {
+      status = (await getConnection(userId))?.status ?? null;
+    } catch {
+      // A failed read hides the block state, never the page.
+      status = null;
+    }
+    calendar = buildCalendarView({
+      isPro: plan === "pro",
+      status,
+      banner: firstParam(params.calendar),
+    });
+  }
+
+  return <AccountPanel view={view} logOut={logOut} deleteAccount={deleteAccount} calendar={calendar} />;
 }

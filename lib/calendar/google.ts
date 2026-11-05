@@ -21,9 +21,25 @@ export type AccessToken = {
   expiresIn: number;
 };
 
+export type ExchangeCodeInput = {
+  code: string;
+  codeVerifier: string;
+  redirectUri: string;
+};
+
+export type ExchangeCodeResult = {
+  accessToken: string;
+  // Null when Google does not return one (repeat consent). The callback
+  // treats that as an error redirect, never as a connection.
+  refreshToken: string | null;
+};
+
 export type GoogleCalendarClient = {
   refreshAccessToken(refreshToken: string): Promise<AccessToken>;
+  exchangeCode(input: ExchangeCodeInput): Promise<ExchangeCodeResult>;
+  revokeToken(token: string): Promise<void>;
   createCalendar(accessToken: string, name: string): Promise<{ id: string }>;
+  deleteCalendar(accessToken: string, calendarId: string): Promise<void>;
   getCalendarExists(accessToken: string, calendarId: string): Promise<boolean>;
   insertEvent(
     accessToken: string,
@@ -72,6 +88,8 @@ function classifyStatus(status: number, bodyText: string): GoogleErrorKind {
   if (status >= 500) return "server";
   return "other";
 }
+
+const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 
 export function createGoogleClient(input: CreateGoogleClientInput): GoogleCalendarClient {
   const fetchFn = input.fetch;
@@ -133,6 +151,57 @@ export function createGoogleClient(input: CreateGoogleClientInput): GoogleCalend
       };
     },
 
+    async exchangeCode(code: ExchangeCodeInput): Promise<ExchangeCodeResult> {
+      const op = "exchangeCode";
+      let res: Response;
+      try {
+        res = await fetchFn(TOKEN_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: input.clientId,
+            client_secret: input.clientSecret,
+            code: code.code,
+            code_verifier: code.codeVerifier,
+            redirect_uri: code.redirectUri,
+            grant_type: "authorization_code",
+          }).toString(),
+        });
+      } catch {
+        throw new GoogleError("server", 0, op);
+      }
+      const bodyText = await res.text();
+      if (!res.ok) {
+        throw new GoogleError(classifyStatus(res.status, bodyText), res.status, op);
+      }
+      const parsed = JSON.parse(bodyText) as {
+        access_token?: unknown;
+        refresh_token?: unknown;
+      };
+      if (typeof parsed.access_token !== "string") {
+        throw new GoogleError("other", res.status, op);
+      }
+      return {
+        accessToken: parsed.access_token,
+        refreshToken: typeof parsed.refresh_token === "string" ? parsed.refresh_token : null,
+      };
+    },
+
+    // Best effort by design: revocation must never fail a disconnect, so
+    // every failure resolves quietly instead of throwing.
+    async revokeToken(token: string): Promise<void> {
+      try {
+        await fetchFn(REVOKE_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ token }).toString(),
+        });
+      } catch {
+        // unreachable Google or a dropped connection: the token stays valid
+        // until it expires, which the disconnect accepts.
+      }
+    },
+
     async createCalendar(accessToken: string, name: string): Promise<{ id: string }> {
       const { bodyText } = await callApi("createCalendar", accessToken, "/calendars", {
         method: "POST",
@@ -153,6 +222,12 @@ export function createGoogleClient(input: CreateGoogleClientInput): GoogleCalend
         if (err instanceof GoogleError && err.kind === "gone") return false;
         throw err;
       }
+    },
+
+    async deleteCalendar(accessToken: string, calendarId: string): Promise<void> {
+      await callApi("deleteCalendar", accessToken, `/calendars/${encodeURIComponent(calendarId)}`, {
+        method: "DELETE",
+      });
     },
 
     async insertEvent(
